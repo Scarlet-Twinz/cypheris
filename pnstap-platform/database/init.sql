@@ -7,6 +7,7 @@
 -- ==========================================================
 
 DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS security_integrations CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS subscriptions CASCADE;
 DROP TABLE IF EXISTS sensor_enrollments CASCADE;
@@ -79,6 +80,25 @@ CREATE TABLE sensor_enrollments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE security_integrations (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    connection_name VARCHAR(255) NOT NULL,
+    environment_name VARCHAR(255) NOT NULL,
+    environment_type VARCHAR(100) NOT NULL DEFAULT 'infrastructure',
+    integration_type VARCHAR(50) NOT NULL,
+    provider VARCHAR(100),
+    api_platform VARCHAR(100),
+    api_url TEXT,
+    enrollment_token VARCHAR(255) NOT NULL UNIQUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    registered_at TIMESTAMPTZ,
+    last_heartbeat TIMESTAMPTZ,
+    last_status_change TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE subscriptions (
     id SERIAL PRIMARY KEY,
     company_id INTEGER NOT NULL UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
@@ -116,6 +136,8 @@ CREATE INDEX idx_network_flows_company_detected ON network_flows(company_id, det
 CREATE INDEX idx_alerts_company_created ON alerts(company_id, created_at DESC);
 CREATE INDEX idx_alerts_company_status ON alerts(company_id, status);
 CREATE INDEX idx_sensor_company_updated ON sensor_enrollments(company_id, updated_at DESC);
+CREATE INDEX idx_integrations_company_created ON security_integrations(company_id, created_at DESC);
+CREATE INDEX idx_integrations_company_status ON security_integrations(company_id, status);
 CREATE INDEX idx_notifications_company_created ON notifications(company_id, created_at DESC);
 CREATE INDEX idx_audit_logs_company_created ON audit_logs(company_id, created_at DESC);
 
@@ -137,4 +159,8 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER sensor_enrollments_updated_at
 BEFORE UPDATE ON sensor_enrollments
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER security_integrations_updated_at
+BEFORE UPDATE ON security_integrations
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
