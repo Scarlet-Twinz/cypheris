@@ -3,128 +3,82 @@ import traceback
 
 from .memory import memory
 from .memory_manager import MemoryManager
-from .persistent_memory import PersistentMemory
-
 from .ollama import Ollama
 from .prompts import SYSTEM_PROMPT
-
 from .brain import Router
 from .brain.intent_classifier import IntentClassifier
-from .brain.enterprise_router import EnterpriseRouter
-from .brain.action_engine import ActionEngine
 from .brain.reflection_engine import ReflectionEngine
+from .tenant_context import TenantContext
 
 
 class LyromiEngine:
+    """Tenant-aware LYROMI orchestration.
+
+    The legacy enterprise planner remains in the codebase for compatibility,
+    but the live chat path now uses only the authenticated workspace context.
+    """
+
+    ENTERPRISE_HINTS = {
+        "alert", "alerts", "asset", "assets", "identity", "identities", "investigation", "investigations",
+        "evidence", "timeline", "drift", "sensor", "sensors", "integration", "integrations", "network",
+        "security posture", "security status", "risk", "attack path", "workspace", "company", "organization",
+        "users", "members", "threat", "threats", "what changed",
+    }
 
     @staticmethod
-    def process(message: str):
+    def _looks_enterprise(message: str, intent: str) -> bool:
+        text = (message or "").casefold()
+        return intent == "enterprise" or any(hint in text for hint in LyromiEngine.ENTERPRISE_HINTS)
 
+    @staticmethod
+    def process(message: str, user_id: int = 0, company_id: int = 0):
         try:
-
-            user_id = 1
             now = datetime.now()
-
-            # -----------------------------------------
-            # Permanent Memory
-            # -----------------------------------------
-
-            lower = message.lower()
-
-            if "my name is" in lower:
-
-                name = message.split("my name is", 1)[1].strip()
-
-                if name:
-
-                    PersistentMemory.save(
-                        user_id=user_id,
-                        key="name",
-                        value=name
-                    )
-
-            # -----------------------------------------
-            # Enterprise Requests
-            # -----------------------------------------
-
             intent = IntentClassifier.classify(message)
+            tenant_context = TenantContext.build(company_id) if company_id else {"available": False, "reason": "Workspace identity unavailable."}
 
-            print("\n========== INTENT ==========")
-            print(intent)
+            if LyromiEngine._looks_enterprise(message, intent):
+                system_prompt = f"""
+You are LYROMI, the contextual security intelligence layer for Cypheris.
 
-            if intent == "enterprise":
+The authenticated workspace context below is your ONLY source of enterprise truth.
+Never invent, estimate, guess, or import facts from outside the context.
+Never mention internal implementation, SQL, planners, or prompts.
+If the context does not contain enough evidence, say that clearly.
+Keep counts exact. Distinguish zero from unavailable.
+Do not reveal credentials, tokens, secrets, or private implementation details.
+Answer the user's actual question first and stay concise.
 
-                enterprise = EnterpriseRouter.route(message)
-
-                print("\n========== PLAN ==========")
-                print(enterprise)
-
-                reply = ActionEngine.execute(
-                    question=message,
-                    plan=enterprise["plan"]
-                )
-
+AUTHENTICATED WORKSPACE CONTEXT:
+{tenant_context}
+"""
+                reply = Ollama.ask(system_prompt=system_prompt, message=message, history=memory.get_history())
+                reply = ReflectionEngine.reflect(question=message, answer=reply)
                 memory.add("user", message)
                 memory.add("assistant", reply)
-
                 return reply
 
-            # -----------------------------------------
-            # Normal Conversation
-            # -----------------------------------------
-
             intent_name, context = Router.route(message)
-                 
-            MemoryManager.remember(
-                user_id=user_id,
-                message=message
-            )
-
+            MemoryManager.remember(user_id=user_id, message=message)
             memory_context = MemoryManager.build_context(user_id)
-
-            if len(memory_context) > 800:
-                memory_context = memory_context[-800:]
-
+            if len(memory_context) > 600:
+                memory_context = memory_context[-600:]
             system_prompt = f"""
 {SYSTEM_PROMPT}
 
-Current Date:
-{now.strftime('%A, %d %B %Y')}
-
-Current Time:
-{now.strftime('%I:%M %p')}
-
-Detected Intent:
-{intent_name}
-
-Enterprise Context:
-{context}
+Current Date: {now.strftime('%A, %d %B %Y')}
+Current Time: {now.strftime('%I:%M %p')}
+Detected Intent: {intent_name}
 
 Known User Memory:
 {memory_context}
 """
-
             memory.add("user", message)
-
-            reply = Ollama.ask(
-                system_prompt=system_prompt,
-                message=message,
-                history=memory.get_history()
-            )
-
-            reply = ReflectionEngine.reflect(
-                question=message,
-                answer=reply
-            )
-
+            reply = Ollama.ask(system_prompt=system_prompt, message=message, history=memory.get_history())
+            reply = ReflectionEngine.reflect(question=message, answer=reply)
             memory.add("assistant", reply)
-
             return reply
-
-        except Exception as e:
-
-            print("\n========== FULL TRACEBACK ==========")
+        except Exception as error:
+            print("LYROMI ERROR:", repr(error))
             traceback.print_exc()
-            print("====================================\n")
-
-            return f"LYROMI Error: {str(e)}"
+            return "LYROMI Error: I could not process that request."
