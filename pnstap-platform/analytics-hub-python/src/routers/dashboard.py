@@ -1,573 +1,150 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from database import get_db_connection
+from auth import get_current_user
 
-router = APIRouter(
-    prefix="/api/dashboard",
-    tags=["Dashboard"]
-)
+router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+
+
+def _rows(cursor, query, params):
+    cursor.execute(query, params)
+    return cursor.fetchall()
 
 
 @router.get("/")
-async def get_dashboard():
+def get_dashboard(current_user: dict = Depends(get_current_user)):
+    connection = get_db_connection()
+    if connection is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable.")
 
-    conn = get_db_connection()
-
-    if conn is None:
-        return {
-            "status": "error",
-            "message": "Database connection failed."
-        }
+    company_id = current_user["company_id"]
 
     try:
+        cursor = connection.cursor()
 
-        cur = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE company_id = %s", (company_id,))
+        users = cursor.fetchone()["total"]
 
-        # ============================================================
-        # ORGANIZATIONS
-        # ============================================================
-
-        cur.execute("""
-            SELECT COUNT(*) AS total
-            FROM companies;
-        """)
-
-        organizations = cur.fetchone()["total"]
-
-
-        # ============================================================
-        # USERS
-        # ============================================================
-
-        cur.execute("""
-            SELECT COUNT(*) AS total
-            FROM users;
-        """)
-
-        users = cur.fetchone()["total"]
-
-
-        # ============================================================
-        # DASHBOARD METRICS
-        # ============================================================
-
-        cur.execute("""
-            SELECT
-                organization_health,
-                threat_level,
-                network_traffic,
-                packets_per_second,
-                latency,
-                sensor_online,
-                ai_confidence,
-                last_analysis,
-                cpu_usage,
-                memory_usage,
-                disk_usage
-            FROM dashboard_metrics
-            ORDER BY id DESC
-            LIMIT 1;
-        """)
-
-        metrics = cur.fetchone()
-
-        if metrics is None:
-
-            metrics = {
-                "organization_health": 0,
-                "threat_level": "LOW",
-                "network_traffic": 0,
-                "packets_per_second": 0,
-                "latency": 0,
-                "sensor_online": False,
-                "ai_confidence": 0,
-                "last_analysis": None,
-                "cpu_usage": 0,
-                "memory_usage": 0,
-                "disk_usage": 0,
-            }
-
-
-        # ============================================================
-        # THREATS
-        # ============================================================
-
-        cur.execute("""
-            SELECT
-                id,
-                company_id,
-                title,
-                severity,
-                status,
-                detected_at
-            FROM threats
-            ORDER BY detected_at DESC
-            LIMIT 20;
-        """)
-
-        threats = cur.fetchall()
-
-
-        # ============================================================
-        # ACTIVE THREATS
-        # ============================================================
-
-        active_threats = 0
-
-        for threat in threats:
-
-            status = str(
-                threat.get("status") or ""
-            ).lower()
-
-            if status not in (
-                "resolved",
-                "closed",
-                "dismissed"
-            ):
-                active_threats += 1
-
-
-        # ============================================================
-        # PNSTAP NETWORK FLOWS
-        # ============================================================
-
-        cur.execute("""
-            SELECT
-                id,
-                company_id,
-                source_ip,
-                destination_ip,
-                protocol,
-                packets,
-                bytes,
-                duration,
-                detected_at
-            FROM network_flows
-            ORDER BY detected_at DESC
-            LIMIT 50;
-        """)
-
-        network_flows = cur.fetchall()
-
-
-        # ============================================================
-        # PNSTAP ACTIVITY LOGS
-        # ============================================================
-
-        cur.execute("""
-            SELECT
-                id,
-                company_id,
-                activity,
-                created_at
-            FROM activity_logs
+        alerts = _rows(
+            cursor,
+            """
+            SELECT id, company_id, alert_type, severity, description, status, created_at
+            FROM alerts
+            WHERE company_id = %s
             ORDER BY created_at DESC
-            LIMIT 50;
-        """)
+            LIMIT 50
+            """,
+            (company_id,),
+        )
 
-        activity_logs = cur.fetchall()
+        network_flows = _rows(
+            cursor,
+            """
+            SELECT id, company_id, source_ip, destination_ip, protocol, packets, bytes, duration, detected_at
+            FROM network_flows
+            WHERE company_id = %s
+            ORDER BY detected_at DESC
+            LIMIT 50
+            """,
+            (company_id,),
+        )
 
+        notifications = _rows(
+            cursor,
+            """
+            SELECT id, company_id, title, message, is_read, created_at
+            FROM notifications
+            WHERE company_id = %s
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (company_id,),
+        )
 
-        # ============================================================
-        # SENSOR ENROLLMENTS
-        # ============================================================
-
-        cur.execute("""
-            SELECT
-                id,
-                company_id,
-                sensor_name,
-                environment_name,
-                environment_type,
-                status,
-                last_heartbeat
+        sensors = _rows(
+            cursor,
+            """
+            SELECT id, company_id, sensor_name, environment_name, environment_type,
+                   status, registered_at, last_heartbeat, last_status_change,
+                   created_at, updated_at
             FROM sensor_enrollments
-            ORDER BY updated_at DESC;
-        """)
+            WHERE company_id = %s
+            ORDER BY updated_at DESC
+            """,
+            (company_id,),
+        )
 
-        sensors = cur.fetchall()
-
-
-        # ============================================================
-        # SENSOR COUNT
-        # ============================================================
-
-        sensor_count = 0
-
-        for sensor in sensors:
-
-            status = str(
-                sensor.get("status") or ""
-            ).upper()
-
-            if status in (
-                "ONLINE",
-                "ACTIVE",
-                "CONNECTED",
-                "HEALTHY"
-            ):
-                sensor_count += 1
-
-
-        # ============================================================
-        # ACTIVITY
-        # ============================================================
+        active_alerts = [a for a in alerts if str(a.get("status") or "").lower() not in {"resolved", "closed", "dismissed"}]
+        online_sensors = [s for s in sensors if str(s.get("status") or "").upper() in {"ONLINE", "ACTIVE", "CONNECTED", "HEALTHY"}]
 
         activity = []
-
-
-        # ------------------------------------------------------------
-        # Threat activity
-        # ------------------------------------------------------------
-
-        for threat in threats:
-
+        for alert in alerts:
             activity.append({
-                "id": f"threat-{threat['id']}",
-
-                "title": threat.get(
-                    "title",
-                    "Security threat"
-                ),
-
-                "severity": threat.get(
-                    "severity",
-                    "info"
-                ),
-
-                "status": threat.get(
-                    "status",
-                    "unknown"
-                ),
-
+                "id": f"alert-{alert['id']}",
+                "title": alert.get("alert_type") or "Security alert",
+                "description": alert.get("description"),
+                "severity": alert.get("severity") or "info",
+                "status": alert.get("status") or "open",
                 "location": "Security Network",
-
-                "timestamp": str(
-                    threat.get(
-                        "detected_at"
-                    )
-                )
-                if threat.get("detected_at")
-                else "Recent"
+                "timestamp": str(alert.get("created_at")) if alert.get("created_at") else "Recent",
             })
-
-
-        # ------------------------------------------------------------
-        # PNSTAP activity logs
-        # ------------------------------------------------------------
-
-        for log in activity_logs:
-
+        for note in notifications:
             activity.append({
-                "id": f"log-{log['id']}",
-
-                "title": log.get(
-                    "activity",
-                    "PNSTAP activity"
-                ),
-
+                "id": f"notification-{note['id']}",
+                "title": note.get("title") or "Security notification",
+                "description": note.get("message"),
                 "severity": "info",
-
-                "status": "logged",
-
-                "location": "PNSTAP",
-
-                "timestamp": str(
-                    log.get(
-                        "created_at"
-                    )
-                )
-                if log.get("created_at")
-                else "Recent"
+                "status": "read" if note.get("is_read") else "unread",
+                "location": "Cypheris",
+                "timestamp": str(note.get("created_at")) if note.get("created_at") else "Recent",
             })
-
-
-        # ------------------------------------------------------------
-        # Network flow activity
-        # ------------------------------------------------------------
-
         for flow in network_flows:
-
             activity.append({
                 "id": f"flow-{flow['id']}",
-
-                "title": (
-                    f"{flow.get('protocol', 'NETWORK')} "
-                    "network flow"
-                ),
-
+                "title": f"{flow.get('protocol') or 'NETWORK'} network flow",
+                "description": f"{flow.get('source_ip') or 'Unknown'} → {flow.get('destination_ip') or 'Unknown'}",
                 "severity": "info",
-
                 "status": "observed",
-
-                "location": (
-                    f"{flow.get('source_ip', 'Unknown')} → "
-                    f"{flow.get('destination_ip', 'Unknown')}"
-                ),
-
-                "timestamp": str(
-                    flow.get(
-                        "detected_at"
-                    )
-                )
-                if flow.get("detected_at")
-                else "Recent"
+                "location": "PNSTAP",
+                "timestamp": str(flow.get("detected_at")) if flow.get("detected_at") else "Recent",
             })
 
+        activity.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
 
-        # ============================================================
-        # SORT ACTIVITY
-        # ============================================================
-
-        activity = sorted(
-            activity,
-            key=lambda item: item.get(
-                "timestamp",
-                ""
-            ),
-            reverse=True
-        )
-
-
-        # ============================================================
-        # CESIUM SIGNALS
-        #
-        # We intentionally do not manufacture coordinates.
-        # Geographic enrichment will be added later.
-        # ============================================================
-
-        signals = []
-
-
-        # ============================================================
-        # THREAT FEED
-        # ============================================================
-
-        threat_feed = []
-
-        for threat in threats:
-
-            threat_feed.append({
-                "id": threat.get("id"),
-
-                "title": threat.get(
-                    "title",
-                    "Threat intelligence update"
-                ),
-
-                "severity": threat.get(
-                    "severity",
-                    "info"
-                ),
-
-                "status": threat.get(
-                    "status",
-                    "unknown"
-                ),
-
-                "timestamp": str(
-                    threat.get(
-                        "detected_at"
-                    )
-                )
-                if threat.get("detected_at")
-                else "Recent"
-            })
-
-
-        # ============================================================
-        # SECURITY SCORE
-        # ============================================================
-
-        security_score = float(
-            metrics.get(
-                "organization_health",
-                0
-            ) or 0
-        )
-
-
-        # ============================================================
-        # SYSTEM RESOURCES
-        # ============================================================
-
-        resources = {
-
-            "CPU": float(
-                metrics.get(
-                    "cpu_usage",
-                    0
-                ) or 0
-            ),
-
-            "Memory": float(
-                metrics.get(
-                    "memory_usage",
-                    0
-                ) or 0
-            ),
-
-            "Disk": float(
-                metrics.get(
-                    "disk_usage",
-                    0
-                ) or 0
-            )
-        }
-
-
-        # ============================================================
-        # EXECUTIVE SUMMARY
-        # ============================================================
-
-        executive_summary = f"""
-Executive Security Summary
-
-• Organization Health: {metrics["organization_health"]}%
-• Threat Level: {metrics["threat_level"]}
-• Active Threats: {active_threats}
-• Network Flows: {len(network_flows)}
-• Activity Events: {len(activity_logs)}
-• Sensors Online: {sensor_count}
-• CPU Usage: {metrics["cpu_usage"]}%
-• Memory Usage: {metrics["memory_usage"]}%
-• Disk Usage: {metrics["disk_usage"]}%
-• AI Confidence: {float(metrics["ai_confidence"])}%
-
-Recommendation:
-"""
-
-        if active_threats == 0:
-
-            executive_summary += (
-                "No active threats detected. "
-                "Continue routine monitoring."
-            )
-
-        else:
-
-            executive_summary += (
-                f"There are {active_threats} active threat(s). "
-                "Review the Threat Center for investigation."
-            )
-
-
-        # ============================================================
-        # RESPONSE
-        # ============================================================
+        threat_level = "CRITICAL" if any(str(a.get("severity") or "").upper() == "CRITICAL" for a in active_alerts) else "HIGH" if any(str(a.get("severity") or "").upper() == "HIGH" for a in active_alerts) else "LOW"
+        security_score = max(0, 100 - min(len(active_alerts) * 10, 100))
 
         return {
-
             "status": "success",
-
-            "organization": "Cypheris Technologies",
-
-            # --------------------------------------------------------
-            # KPI
-            # --------------------------------------------------------
-
+            "organization": current_user.get("company_id"),
             "users": users,
-
             "active_users": users,
-
-            "threats": active_threats,
-
-            "incidents": 0,
-
+            "threats": len(active_alerts),
+            "incidents": len(active_alerts),
             "events": len(activity),
-
             "security_score": security_score,
-
-            # --------------------------------------------------------
-            # METRICS
-            # --------------------------------------------------------
-
-            "health": metrics["organization_health"],
-
-            "threat_level": metrics["threat_level"],
-
-            "network_traffic": metrics["network_traffic"],
-
-            "packets_per_second": metrics["packets_per_second"],
-
-            "latency": metrics["latency"],
-
-            "sensor_online": metrics["sensor_online"],
-
-            "ai_confidence": float(
-                metrics["ai_confidence"]
+            "health": security_score,
+            "threat_level": threat_level,
+            "network_traffic": sum(int(flow.get("bytes") or 0) for flow in network_flows),
+            "packets_per_second": sum(int(flow.get("packets") or 0) for flow in network_flows),
+            "latency": 0,
+            "sensor_online": bool(online_sensors),
+            "ai_confidence": 0,
+            "last_analysis": str(activity[0]["timestamp"]) if activity else None,
+            "activity": activity[:100],
+            "signals": [],
+            "threat_feed": alerts[:20],
+            "resources": {"CPU": 0, "Memory": 0, "Disk": 0},
+            "integrations": {"sensors": len(online_sensors), "clouds": 0, "apis": 0},
+            "organizations": 1,
+            "telemetry": {"network_flows": len(network_flows), "notifications": len(notifications), "sensors": len(sensors)},
+            "lyromi_message": (
+                "No active security alerts were found. Continue routine monitoring."
+                if not active_alerts else
+                f"{len(active_alerts)} active security alert(s) require review in the Threat Center."
             ),
-
-            "last_analysis": str(
-                metrics["last_analysis"]
-            ),
-
-            # --------------------------------------------------------
-            # DATA
-            # --------------------------------------------------------
-
-            "activity": activity,
-
-            "signals": signals,
-
-            "threat_feed": threat_feed,
-
-            "resources": resources,
-
-            # --------------------------------------------------------
-            # INTEGRATIONS
-            # --------------------------------------------------------
-
-            "integrations": {
-                "sensors": sensor_count,
-                "clouds": 0,
-                "apis": 0
-            },
-
-            # --------------------------------------------------------
-            # COUNTS
-            # --------------------------------------------------------
-
-            "organizations": organizations,
-
-            # --------------------------------------------------------
-            # PNSTAP TELEMETRY STATUS
-            # --------------------------------------------------------
-
-            "telemetry": {
-                "network_flows": len(
-                    network_flows
-                ),
-
-                "activity_logs": len(
-                    activity_logs
-                ),
-
-                "sensors": len(
-                    sensors
-                )
-            },
-
-            # --------------------------------------------------------
-            # LYROMI
-            # --------------------------------------------------------
-
-            "lyromi_message": executive_summary
         }
-
-
     except Exception as error:
-
-        print(
-            "Dashboard query failed:",
-            error
-        )
-
-        return {
-            "status": "error",
-            "message": str(error)
-        }
-
+        connection.rollback()
+        raise HTTPException(status_code=500, detail="Unable to load dashboard telemetry.") from error
     finally:
-
-        conn.close()
+        connection.close()
