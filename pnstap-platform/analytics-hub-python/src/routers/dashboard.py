@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from database import get_db_connection
+
 from auth import get_current_user
+from database import get_db_connection
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -73,8 +74,33 @@ def get_dashboard(current_user: dict = Depends(get_current_user)):
             (company_id,),
         )
 
-        active_alerts = [a for a in alerts if str(a.get("status") or "").lower() not in {"resolved", "closed", "dismissed"}]
-        online_sensors = [s for s in sensors if str(s.get("status") or "").upper() in {"ONLINE", "ACTIVE", "CONNECTED", "HEALTHY"}]
+        cursor.execute(
+            """
+            SELECT integration_type, status, COUNT(*) AS total
+            FROM security_integrations
+            WHERE company_id = %s
+            GROUP BY integration_type, status
+            """,
+            (company_id,),
+        )
+        integration_rows = cursor.fetchall()
+
+        active_alerts = [
+            a for a in alerts
+            if str(a.get("status") or "").lower() not in {"resolved", "closed", "dismissed"}
+        ]
+        online_sensors = [
+            s for s in sensors
+            if str(s.get("status") or "").upper() in {"ONLINE", "ACTIVE", "CONNECTED", "HEALTHY"}
+        ]
+
+        cloud_count = sum(int(row["total"]) for row in integration_rows if row["integration_type"] == "CLOUD")
+        api_count = sum(int(row["total"]) for row in integration_rows if row["integration_type"] == "API")
+        online_integrations = sum(
+            int(row["total"])
+            for row in integration_rows
+            if str(row["status"] or "").upper() in {"ONLINE", "ACTIVE", "CONNECTED", "HEALTHY"}
+        )
 
         activity = []
         for alert in alerts:
@@ -110,12 +136,16 @@ def get_dashboard(current_user: dict = Depends(get_current_user)):
 
         activity.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
 
-        threat_level = "CRITICAL" if any(str(a.get("severity") or "").upper() == "CRITICAL" for a in active_alerts) else "HIGH" if any(str(a.get("severity") or "").upper() == "HIGH" for a in active_alerts) else "LOW"
+        threat_level = (
+            "CRITICAL" if any(str(a.get("severity") or "").upper() == "CRITICAL" for a in active_alerts)
+            else "HIGH" if any(str(a.get("severity") or "").upper() == "HIGH" for a in active_alerts)
+            else "LOW"
+        )
         security_score = max(0, 100 - min(len(active_alerts) * 10, 100))
 
         return {
             "status": "success",
-            "organization": current_user.get("company_id"),
+            "organization": company_id,
             "users": users,
             "active_users": users,
             "threats": len(active_alerts),
@@ -134,13 +164,23 @@ def get_dashboard(current_user: dict = Depends(get_current_user)):
             "signals": [],
             "threat_feed": alerts[:20],
             "resources": {"CPU": 0, "Memory": 0, "Disk": 0},
-            "integrations": {"sensors": len(online_sensors), "clouds": 0, "apis": 0},
+            "integrations": {
+                "sensors": len(online_sensors),
+                "clouds": cloud_count,
+                "apis": api_count,
+                "online": online_integrations,
+            },
             "organizations": 1,
-            "telemetry": {"network_flows": len(network_flows), "notifications": len(notifications), "sensors": len(sensors)},
+            "telemetry": {
+                "network_flows": len(network_flows),
+                "notifications": len(notifications),
+                "sensors": len(sensors),
+                "integrations": sum(int(row["total"]) for row in integration_rows),
+            },
             "lyromi_message": (
                 "No active security alerts were found. Continue routine monitoring."
-                if not active_alerts else
-                f"{len(active_alerts)} active security alert(s) require review in the Threat Center."
+                if not active_alerts
+                else f"{len(active_alerts)} active security alert(s) require review in the Threat Center."
             ),
         }
     except Exception as error:
