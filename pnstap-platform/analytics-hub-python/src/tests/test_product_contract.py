@@ -1,7 +1,11 @@
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key")
+os.environ.setdefault("ALGORITHM", "HS256")
 
 SRC = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SRC))
