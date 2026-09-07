@@ -14,6 +14,7 @@ from routers.lyromi import router as lyromi_router
 from routers.integrations import router as integrations_router
 from routers.integration_alias import router as integration_alias_router
 from routers.billing import router as billing_router
+from routers.payments import router as payments_router
 from routers.workspace import router as workspace_router
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,6 +46,7 @@ app.include_router(sensors_router)
 app.include_router(integrations_router)
 app.include_router(integration_alias_router)
 app.include_router(billing_router)
+app.include_router(payments_router)
 app.include_router(workspace_router)
 
 
