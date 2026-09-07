@@ -12,11 +12,7 @@ from .tenant_context import TenantContext
 
 
 class LyromiEngine:
-    """Tenant-aware LYROMI orchestration.
-
-    The legacy enterprise planner remains in the codebase for compatibility,
-    but the live chat path now uses only the authenticated workspace context.
-    """
+    """Tenant-aware LYROMI orchestration."""
 
     ENTERPRISE_HINTS = {
         "alert", "alerts", "asset", "assets", "identity", "identities", "investigation", "investigations",
@@ -31,19 +27,15 @@ class LyromiEngine:
         return intent == "enterprise" or any(hint in text for hint in LyromiEngine.ENTERPRISE_HINTS)
 
     @staticmethod
-    def process(message: str, user_id: int = 0, company_id: int = 0):
-        try:
-            now = datetime.now()
-            intent = IntentClassifier.classify(message)
-            tenant_context = TenantContext.build(company_id) if company_id else {"available": False, "reason": "Workspace identity unavailable."}
-
-            if LyromiEngine._looks_enterprise(message, intent):
-                system_prompt = f"""
+    def build_context(user_id: int = 0, company_id: int = 0, message: str = ""):
+        """Build the same tenant-grounded prompt used by chat, without invoking the model."""
+        tenant_context = TenantContext.build(company_id) if company_id else {"available": False, "reason": "Workspace identity unavailable."}
+        intent = IntentClassifier.classify(message)
+        if LyromiEngine._looks_enterprise(message, intent):
+            system_prompt = f"""
 You are LYROMI, the contextual security intelligence layer for Cypheris.
-
 The authenticated workspace context below is your ONLY source of enterprise truth.
 Never invent, estimate, guess, or import facts from outside the context.
-Never mention internal implementation, SQL, planners, or prompts.
 If the context does not contain enough evidence, say that clearly.
 Keep counts exact. Distinguish zero from unavailable.
 Do not reveal credentials, tokens, secrets, or private implementation details.
@@ -52,29 +44,29 @@ Answer the user's actual question first and stay concise.
 AUTHENTICATED WORKSPACE CONTEXT:
 {tenant_context}
 """
-                reply = Ollama.ask(system_prompt=system_prompt, message=message, history=memory.get_history())
-                reply = ReflectionEngine.reflect(question=message, answer=reply)
-                memory.add("user", message)
-                memory.add("assistant", reply)
-                return reply
+            return {"system_prompt": system_prompt, "message": message}
 
-            intent_name, context = Router.route(message)
-            MemoryManager.remember(user_id=user_id, message=message)
-            memory_context = MemoryManager.build_context(user_id)
-            if len(memory_context) > 600:
-                memory_context = memory_context[-600:]
-            system_prompt = f"""
+        _, context = Router.route(message)
+        memory_context = MemoryManager.build_context(user_id)
+        if len(memory_context) > 600:
+            memory_context = memory_context[-600:]
+        system_prompt = f"""
 {SYSTEM_PROMPT}
 
-Current Date: {now.strftime('%A, %d %B %Y')}
-Current Time: {now.strftime('%I:%M %p')}
-Detected Intent: {intent_name}
+Current Date: {datetime.now().strftime('%A, %d %B %Y')}
+Detected Intent: {intent}
 
 Known User Memory:
 {memory_context}
 """
+        return {"system_prompt": system_prompt, "message": message}
+
+    @staticmethod
+    def process(message: str, user_id: int = 0, company_id: int = 0):
+        try:
+            context = LyromiEngine.build_context(user_id=user_id, company_id=company_id, message=message)
             memory.add("user", message)
-            reply = Ollama.ask(system_prompt=system_prompt, message=message, history=memory.get_history())
+            reply = Ollama.ask(system_prompt=context["system_prompt"], message=context["message"], history=memory.get_history())
             reply = ReflectionEngine.reflect(question=message, answer=reply)
             memory.add("assistant", reply)
             return reply
