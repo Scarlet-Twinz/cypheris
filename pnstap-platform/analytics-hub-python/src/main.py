@@ -68,6 +68,9 @@ def database_status():
 
 @app.post("/auth/signup")
 def signup(user: UserSignUpRequest):
+    if user.password != user.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+
     connection = get_db_connection()
     if connection is None:
         raise HTTPException(status_code=503, detail="Database connection unavailable.")
@@ -83,7 +86,7 @@ def signup(user: UserSignUpRequest):
                 INSERT INTO companies (company_name, industry, country, email, phone, website)
                 VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
                 """,
-                (user.company_name.strip(), user.industry, user.country, str(user.email).lower(), user.phone_number, user.website),
+                (user.company_name, user.industry, user.country, str(user.email).lower(), user.phone_number, user.website),
             )
             company_id = cursor.fetchone()["id"]
 
@@ -93,7 +96,7 @@ def signup(user: UserSignUpRequest):
                 VALUES (%s, %s, %s, %s, %s, 'Admin')
                 RETURNING id, full_name, email, role
                 """,
-                (company_id, user.full_name.strip(), str(user.email).lower(), user.phone_number, hash_password(user.password)),
+                (company_id, user.full_name, str(user.email).lower(), user.phone_number, hash_password(user.password)),
             )
             admin = cursor.fetchone()
 
