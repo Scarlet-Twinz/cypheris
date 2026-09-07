@@ -12,6 +12,7 @@ from routers.sensors import router as sensors_router
 from routers.dashboard import router as dashboard_router
 from routers.lyromi import router as lyromi_router
 from routers.integrations import router as integrations_router
+from routers.billing import router as billing_router
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env", override=True)
@@ -40,6 +41,7 @@ app.include_router(dashboard_router)
 app.include_router(lyromi_router)
 app.include_router(sensors_router)
 app.include_router(integrations_router)
+app.include_router(billing_router)
 
 
 @app.get("/")
@@ -100,7 +102,17 @@ def signup(user: UserSignUpRequest):
             )
             admin = cursor.fetchone()
 
-            cursor.execute("INSERT INTO subscriptions (company_id) VALUES (%s)", (company_id,))
+            cursor.execute(
+                """
+                INSERT INTO subscriptions (
+                    company_id, plan, billing_cycle, user_limit, current_users,
+                    annual_price, trial_started_at, trial_ends_at, status
+                )
+                VALUES (%s, 'Free', 'Yearly', 1, 1, 0, CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP + INTERVAL '7 days', 'TRIALING')
+                """,
+                (company_id,),
+            )
             connection.commit()
 
         token = create_access_token({"user_id": admin["id"], "company_id": company_id, "role": admin["role"]})
@@ -108,6 +120,7 @@ def signup(user: UserSignUpRequest):
             "status": "success",
             "access_token": token,
             "token_type": "bearer",
+            "trial": {"days": 7, "status": "TRIALING"},
             "company": {"id": company_id, "name": user.company_name},
             "administrator": {"id": admin["id"], "name": admin["full_name"], "email": admin["email"], "role": admin["role"]},
         }
