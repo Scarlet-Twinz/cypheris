@@ -8,6 +8,7 @@ import InstallSensor from "../pages/InstallSensor/InstallSensor";
 import SensorSetup from "../pages/SensorSetup/SensorSetup";
 import { Overview, Simple, Sensors, Integrations, Lyromi, Billing, Settings, Team, Audit } from "../pages/Platform/WorkspacePages";
 import { SecurityHub, RiskGraph, Compliance, AttackPaths } from "../pages/Platform/AdvancedPages";
+import { Alerts, Network, Assets, Intelligence, Notifications } from "../pages/Platform/OperationalPages";
 
 export default function AppRoutes(){return <Routes>
     <Route path="/" element={<Home/>}/>
@@ -19,11 +20,11 @@ export default function AppRoutes(){return <Routes>
     <Route path="/dashboard" element={<Dashboard/>}/>
     <Route path="/workspace" element={<Overview/>}/>
     <Route path="/workspace/security" element={<SecurityHub/>}/>
-    <Route path="/workspace/alerts" element={<Simple name="Alerts"/>}/>
-    <Route path="/workspace/network" element={<Simple name="Network"/>}/>
-    <Route path="/workspace/assets" element={<Simple name="Assets"/>}/>
+    <Route path="/workspace/alerts" element={<Alerts/>}/>
+    <Route path="/workspace/network" element={<Network/>}/>
+    <Route path="/workspace/assets" element={<Assets/>}/>
     <Route path="/workspace/sensors" element={<Sensors/>}/>
-    <Route path="/workspace/intelligence" element={<Simple name="Intelligence"/>}/>
+    <Route path="/workspace/intelligence" element={<Intelligence/>}/>
     <Route path="/workspace/risk-graph" element={<RiskGraph/>}/>
     <Route path="/workspace/attack-paths" element={<AttackPaths/>}/>
     <Route path="/workspace/compliance" element={<Compliance/>}/>
@@ -31,7 +32,7 @@ export default function AppRoutes(){return <Routes>
     <Route path="/workspace/incidents" element={<Simple name="Incidents"/>}/>
     <Route path="/workspace/reports" element={<Simple name="Reports"/>}/>
     <Route path="/workspace/integrations" element={<Integrations/>}/>
-    <Route path="/workspace/notifications" element={<Simple name="Notifications"/>}/>
+    <Route path="/workspace/notifications" element={<Notifications/>}/>
     <Route path="/workspace/team" element={<Team/>}/>
     <Route path="/workspace/billing" element={<Billing/>}/>
     <Route path="/workspace/settings" element={<Settings/>}/>
