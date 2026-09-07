@@ -12,7 +12,9 @@ from routers.sensors import router as sensors_router
 from routers.dashboard import router as dashboard_router
 from routers.lyromi import router as lyromi_router
 from routers.integrations import router as integrations_router
+from routers.integration_alias import router as integration_alias_router
 from routers.billing import router as billing_router
+from routers.workspace import router as workspace_router
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env", override=True)
@@ -41,7 +43,9 @@ app.include_router(dashboard_router)
 app.include_router(lyromi_router)
 app.include_router(sensors_router)
 app.include_router(integrations_router)
+app.include_router(integration_alias_router)
 app.include_router(billing_router)
+app.include_router(workspace_router)
 
 
 @app.get("/")
