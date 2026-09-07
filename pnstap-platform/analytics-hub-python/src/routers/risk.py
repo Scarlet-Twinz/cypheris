@@ -29,6 +29,21 @@ def _row_time(value):
     return value.isoformat() if value else None
 
 
+def _recommendation(severity, flow_count):
+    level = str(severity or "INFO").upper()
+    if level == "CRITICAL":
+        action = "Investigate immediately, validate affected assets, and contain the highest-risk relationship."
+    elif level == "HIGH":
+        action = "Investigate the affected relationship, validate exposure, and apply the appropriate control or remediation."
+    elif level == "MEDIUM":
+        action = "Validate the finding against connected telemetry and schedule remediation based on confirmed exposure."
+    else:
+        action = "Review the finding and collect enough telemetry to determine whether remediation is required."
+    if flow_count:
+        action += " Network telemetry is available for correlation."
+    return action
+
+
 @router.get("/context")
 def context_graph(current_user: dict = Depends(get_current_user)):
     connection = get_db_connection()
@@ -261,15 +276,90 @@ def priorities(current_user: dict = Depends(get_current_user)):
 
         items = []
         for alert in alerts:
-            score = _severity_score(alert["severity"])
-            score = min(100, score + min(20, int(flow_count)))
+            base = _severity_score(alert["severity"])
+            telemetry_bonus = min(20, int(flow_count))
+            score = min(100, base + telemetry_bonus)
             items.append({
-                "id": alert["id"], "title": alert["alert_type"],
-                "score": score, "band": _risk_band(score),
-                "severity": alert["severity"], "status": alert["status"],
-                "recommendation": "Investigate connected telemetry and contain the highest-risk relationship first.",
+                "id": alert["id"],
+                "title": alert["alert_type"],
+                "description": alert["description"] or "No additional finding description was recorded.",
+                "score": score,
+                "band": _risk_band(score),
+                "severity": alert["severity"],
+                "status": alert["status"],
+                "created_at": _row_time(alert["created_at"]),
+                "evidence": ["open finding"] + (["network telemetry"] if flow_count else []),
+                "recommendation": _recommendation(alert["severity"], flow_count),
             })
-        items.sort(key=lambda item: item["score"], reverse=True)
+        items.sort(key=lambda item: (item["score"], item["created_at"] or ""), reverse=True)
         return {"items": items[:20], "total_open_findings": len(alerts), "telemetry": int(flow_count)}
+    finally:
+        connection.close()
+
+
+@router.get("/choke-points")
+def choke_points(current_user: dict = Depends(get_current_user)):
+    connection = get_db_connection()
+    if connection is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable.")
+
+    company_id = current_user["company_id"]
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT source_ip::text AS source_ip, destination_ip::text AS destination_ip,
+                       protocol, bytes, detected_at
+                FROM network_flows WHERE company_id = %s
+                ORDER BY detected_at DESC LIMIT 1000
+                """, (company_id,),
+            )
+            flows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT severity, status FROM alerts WHERE company_id = %s
+                  AND LOWER(status) NOT IN ('closed', 'resolved')
+                """, (company_id,),
+            )
+            alerts = cursor.fetchall()
+
+        if not flows:
+            return {
+                "items": [], "calculated": False,
+                "reason": "No network telemetry is available to identify repeated relationship choke points.",
+                "evidence": {"network_flows": 0, "open_findings": len(alerts)},
+            }
+
+        node_degree = Counter()
+        pair_counts = Counter()
+        for flow in flows:
+            source = flow["source_ip"]
+            destination = flow["destination_ip"]
+            if source:
+                node_degree[source] += 1
+            if destination:
+                node_degree[destination] += 1
+            if source and destination:
+                pair_counts[(source, destination)] += 1
+
+        highest_severity = max((_severity_score(a["severity"]) for a in alerts), default=0)
+        items = []
+        for node, degree in node_degree.most_common(10):
+            score = min(100, degree * 5 + min(25, highest_severity // 4))
+            items.append({
+                "node": node,
+                "score": score,
+                "band": _risk_band(score),
+                "observations": degree,
+                "related_paths": sum(count for (source, destination), count in pair_counts.items() if source == node or destination == node),
+                "reason": "Repeated network relationships make this entity a useful investigation and control point.",
+            })
+
+        return {
+            "items": items,
+            "calculated": bool(items),
+            "reason": None,
+            "evidence": {"network_flows": len(flows), "open_findings": len(alerts)},
+        }
     finally:
         connection.close()
