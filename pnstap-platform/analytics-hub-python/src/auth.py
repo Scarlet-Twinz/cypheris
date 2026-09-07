@@ -58,3 +58,9 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             detail="Invalid or expired authentication token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if str(current_user.get("role", "")).casefold() != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required.")
+    return current_user
