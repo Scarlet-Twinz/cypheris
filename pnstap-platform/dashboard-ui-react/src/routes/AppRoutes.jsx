@@ -7,7 +7,7 @@ import Onboarding from "../pages/onboarding/onboarding";
 import InstallSensor from "../pages/InstallSensor/InstallSensor";
 import SensorSetup from "../pages/SensorSetup/SensorSetup";
 import { Overview, Simple, Sensors, Integrations, Lyromi, Billing, Settings, Team, Audit } from "../pages/Platform/WorkspacePages";
-import { RiskGraph, Compliance, AttackPaths } from "../pages/Platform/AdvancedPages";
+import { SecurityHub, RiskGraph, Compliance, AttackPaths } from "../pages/Platform/AdvancedPages";
 
 export default function AppRoutes(){return <Routes>
     <Route path="/" element={<Home/>}/>
@@ -18,7 +18,7 @@ export default function AppRoutes(){return <Routes>
     <Route path="/sensor-setup" element={<SensorSetup/>}/>
     <Route path="/dashboard" element={<Dashboard/>}/>
     <Route path="/workspace" element={<Overview/>}/>
-    <Route path="/workspace/security" element={<Simple name="Security"/>}/>
+    <Route path="/workspace/security" element={<SecurityHub/>}/>
     <Route path="/workspace/alerts" element={<Simple name="Alerts"/>}/>
     <Route path="/workspace/network" element={<Simple name="Network"/>}/>
     <Route path="/workspace/assets" element={<Simple name="Assets"/>}/>
