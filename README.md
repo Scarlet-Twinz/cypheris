@@ -63,6 +63,8 @@ Cypheris' AI intelligence layer. LYROMI is integrated into the backend as a serv
 
 ## Repository layout
 
+The GitHub repository currently contains the application source under `pnstap-platform/`.
+
 ```text
 pnstap-platform/
 ├── analytics-hub-python/     # FastAPI backend and LYROMI services
@@ -91,10 +93,12 @@ pnstap-platform/
 
 ## Local development
 
+Run the following commands from the repository root.
+
 ### 1. Backend
 
 ```bash
-cd analytics-hub-python/src
+cd pnstap-platform/analytics-hub-python/src
 python -m venv .venv
 # Windows
 .venv\\Scripts\\activate
@@ -122,7 +126,7 @@ GET /health
 Create a PostgreSQL database named `pnstap` and run:
 
 ```bash
-psql -U postgres -d pnstap -f database/init.sql
+psql -U postgres -d pnstap -f pnstap-platform/database/init.sql
 ```
 
 The initialization script is reset-oriented and drops the Cypheris application tables before recreating them. Do not use it against data that must be preserved.
@@ -130,7 +134,7 @@ The initialization script is reset-oriented and drops the Cypheris application t
 ### 3. Frontend
 
 ```bash
-cd dashboard-ui-react
+cd pnstap-platform/dashboard-ui-react
 npm ci
 ```
 
@@ -151,7 +155,7 @@ npm run dev
 The Compose stack provides PostgreSQL, the FastAPI service, and the React/Nginx frontend.
 
 ```bash
-cd deployment/docker
+cd pnstap-platform/deployment/docker
 docker compose up --build
 ```
 
@@ -168,11 +172,11 @@ Set `SECRET_KEY` in the environment before starting the stack. For deployments b
 | `GET /api/dashboard/` | Workspace security telemetry | Bearer token |
 | `POST /api/lyromi/chat` | LYROMI intelligence request | Bearer token |
 | `/api/sensors/*` | Sensor enrollment and telemetry lifecycle | Mixed: user/sensor credentials |
-| `/api/integrations/*` | Cloud/security integration lifecycle | Authenticated platform access |
+| `/api/integrations/*` | Cloud/security integration lifecycle | Mixed: user/agent credentials |
 
 ## Security model
 
-Cypheris treats the authenticated `company_id` in the signed access token as the workspace boundary for dashboard data. The frontend sends the bearer token with protected API requests, while the backend validates the token before serving protected dashboard and LYROMI operations.
+Cypheris treats the authenticated `company_id` in the signed access token as the workspace boundary for dashboard data, sensors, and integration management. The frontend sends the bearer token with protected API requests, while the backend validates the token before serving protected operations.
 
 Secrets and local environment files are excluded from source control. Public configuration is represented through `.env.example` files.
 
