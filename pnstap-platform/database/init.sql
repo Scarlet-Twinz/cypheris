@@ -6,6 +6,13 @@
 -- need to preserve. Production should use versioned migrations.
 -- ==========================================================
 
+DROP TABLE IF EXISTS drift_events CASCADE;
+DROP TABLE IF EXISTS security_timeline CASCADE;
+DROP TABLE IF EXISTS evidence CASCADE;
+DROP TABLE IF EXISTS investigation_events CASCADE;
+DROP TABLE IF EXISTS investigations CASCADE;
+DROP TABLE IF EXISTS asset_registry CASCADE;
+DROP TABLE IF EXISTS identity_events CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS security_integrations CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
@@ -143,6 +150,101 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Product intelligence layer: durable objects used by investigations, graph context,
+-- drift detection and evidence-backed AI. These are intentionally generic so the
+-- same model can accept sensor, integration and human-generated observations.
+CREATE TABLE asset_registry (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    asset_key VARCHAR(255) NOT NULL,
+    asset_name VARCHAR(255) NOT NULL,
+    asset_type VARCHAR(80) NOT NULL DEFAULT 'unknown',
+    environment_name VARCHAR(255),
+    criticality VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    exposure VARCHAR(30) NOT NULL DEFAULT 'INTERNAL',
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'manual',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    first_seen TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, asset_key)
+);
+
+CREATE TABLE identity_events (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    identity_key VARCHAR(255) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'sensor',
+    risk_score INTEGER NOT NULL DEFAULT 0 CHECK (risk_score BETWEEN 0 AND 100),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE investigations (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+    priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    source_alert_id INTEGER REFERENCES alerts(id) ON DELETE SET NULL,
+    summary TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMPTZ
+);
+
+CREATE TABLE investigation_events (
+    id BIGSERIAL PRIMARY KEY,
+    investigation_id BIGINT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    event_type VARCHAR(80) NOT NULL,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    message TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE evidence (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    investigation_id BIGINT REFERENCES investigations(id) ON DELETE CASCADE,
+    evidence_type VARCHAR(80) NOT NULL,
+    source VARCHAR(80) NOT NULL,
+    subject_key VARCHAR(255),
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    collected_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE security_timeline (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    event_type VARCHAR(80) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'INFO',
+    subject_type VARCHAR(80),
+    subject_key VARCHAR(255),
+    message TEXT NOT NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'platform',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE drift_events (
+    id BIGSERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    subject_type VARCHAR(80) NOT NULL,
+    subject_key VARCHAR(255) NOT NULL,
+    change_type VARCHAR(80) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    before_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+    after_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+    source VARCHAR(80) NOT NULL DEFAULT 'sensor',
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_users_company_id ON users(company_id);
 CREATE INDEX idx_network_flows_company_detected ON network_flows(company_id, detected_at DESC);
 CREATE INDEX idx_alerts_company_created ON alerts(company_id, created_at DESC);
@@ -152,6 +254,13 @@ CREATE INDEX idx_integrations_company_created ON security_integrations(company_i
 CREATE INDEX idx_integrations_company_status ON security_integrations(company_id, status);
 CREATE INDEX idx_notifications_company_created ON notifications(company_id, created_at DESC);
 CREATE INDEX idx_audit_logs_company_created ON audit_logs(company_id, created_at DESC);
+CREATE INDEX idx_assets_company_seen ON asset_registry(company_id, last_seen DESC);
+CREATE INDEX idx_identity_company_observed ON identity_events(company_id, observed_at DESC);
+CREATE INDEX idx_investigations_company_updated ON investigations(company_id, updated_at DESC);
+CREATE INDEX idx_investigation_events_investigation ON investigation_events(investigation_id, created_at DESC);
+CREATE INDEX idx_evidence_company_observed ON evidence(company_id, observed_at DESC);
+CREATE INDEX idx_timeline_company_occurred ON security_timeline(company_id, occurred_at DESC);
+CREATE INDEX idx_drift_company_detected ON drift_events(company_id, detected_at DESC);
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -165,3 +274,4 @@ CREATE TRIGGER companies_updated_at BEFORE UPDATE ON companies FOR EACH ROW EXEC
 CREATE TRIGGER subscriptions_updated_at BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER sensor_enrollments_updated_at BEFORE UPDATE ON sensor_enrollments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER security_integrations_updated_at BEFORE UPDATE ON security_integrations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER investigations_updated_at BEFORE UPDATE ON investigations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
