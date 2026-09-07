@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS investigation_events CASCADE;
 DROP TABLE IF EXISTS investigations CASCADE;
 DROP TABLE IF EXISTS asset_registry CASCADE;
 DROP TABLE IF EXISTS identity_events CASCADE;
+DROP TABLE IF EXISTS workspace_invitations CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS security_integrations CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
@@ -27,19 +28,30 @@ CREATE TABLE companies (
     id SERIAL PRIMARY KEY,
     company_name VARCHAR(150) NOT NULL,
     industry VARCHAR(100), country VARCHAR(100), email VARCHAR(255) NOT NULL,
-    phone VARCHAR(30), website VARCHAR(255), logo_url TEXT,
+    phone VARCHAR(30), website VARCHAR(255), timezone VARCHAR(80) NOT NULL DEFAULT 'UTC',
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD', logo_url TEXT,
     brand_primary_color VARCHAR(7) NOT NULL DEFAULT '#00E5FF',
     brand_secondary_color VARCHAR(7) NOT NULL DEFAULT '#0A1628',
     subscription_plan VARCHAR(30) NOT NULL DEFAULT 'Free', status VARCHAR(30) NOT NULL DEFAULT 'Trial',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT companies_primary_color_hex CHECK (brand_primary_color ~ '^#[0-9A-Fa-f]{6}$'),
-    CONSTRAINT companies_secondary_color_hex CHECK (brand_secondary_color ~ '^#[0-9A-Fa-f]{6}$')
+    CONSTRAINT companies_secondary_color_hex CHECK (brand_secondary_color ~ '^#[0-9A-Fa-f]{6}$'),
+    CONSTRAINT companies_currency_code CHECK (currency ~ '^[A-Z]{3}$')
 );
 CREATE TABLE users (
     id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     full_name VARCHAR(150) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, phone_number VARCHAR(30),
     password_hash TEXT NOT NULL, role VARCHAR(50) NOT NULL DEFAULT 'Admin', status VARCHAR(20) NOT NULL DEFAULT 'Active',
-    last_login TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    last_login TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT users_role_check CHECK (role IN ('Admin','Analyst','Viewer'))
+);
+CREATE TABLE workspace_invitations (
+    id BIGSERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL, full_name VARCHAR(150) NOT NULL, role VARCHAR(50) NOT NULL DEFAULT 'Analyst',
+    token_hash CHAR(64) NOT NULL UNIQUE, invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    expires_at TIMESTAMPTZ NOT NULL, accepted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT invitations_role_check CHECK (role IN ('Admin','Analyst','Viewer'))
 );
 CREATE TABLE network_flows (
     id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -141,6 +153,8 @@ CREATE TABLE sensor_telemetry (
 );
 
 CREATE INDEX idx_users_company_id ON users(company_id);
+CREATE INDEX idx_invitations_company_created ON workspace_invitations(company_id, created_at DESC);
+CREATE INDEX idx_invitations_email ON workspace_invitations(LOWER(email));
 CREATE INDEX idx_network_flows_company_detected ON network_flows(company_id, detected_at DESC);
 CREATE INDEX idx_alerts_company_created ON alerts(company_id, created_at DESC);
 CREATE INDEX idx_alerts_company_status ON alerts(company_id, status);
