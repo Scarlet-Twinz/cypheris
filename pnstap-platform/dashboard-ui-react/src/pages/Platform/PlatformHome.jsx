@@ -1,0 +1,18 @@
+import { Link } from "react-router-dom";
+import "./PlatformPages.css";
+
+const modules=[
+ ["Security Command","/workspace/overview","Posture, detections, telemetry and connected environments."],
+ ["Security Hub","/workspace/security","Central security posture and investigation entry point."],
+ ["Alert Center","/workspace/alerts","Review evidence-backed findings by severity and status."],
+ ["Incident Workspace","/workspace/incidents","Triage active findings and move through response stages."],
+ ["Network Intelligence","/workspace/network","Explore observed communication and network telemetry."],
+ ["Asset Inventory","/workspace/assets","See the sensors and environments connected to Cypheris."],
+ ["Risk Graph","/workspace/risk-graph","Explore relationships between identities, findings and telemetry."],
+ ["Attack Paths","/workspace/attack-paths","Prioritize paths using the evidence currently available."],
+ ["Threat Intelligence","/workspace/intelligence","Enrich security observations with external context."],
+ ["LYROMI Intelligence","/workspace/lyromi","Ask the Cypheris intelligence layer about your security data."],
+ ["Security Reports","/workspace/reports","Build executive and operational posture summaries."],
+ ["Developer API","/workspace/api","Connect Cypheris to automation and customer applications."]
+];
+export default function PlatformHome(){return <div className="platform-shell"><aside className="platform-sidebar"><Link className="platform-brand" to="/"><span className="brand-mark">CY</span><span><strong>Cypheris</strong><small>Security Fabric</small></span></Link><div className="workspace-label">PLATFORM HOME</div><nav><Link className="active" to="/workspace">Home</Link><Link to="/workspace/overview">Command Center</Link><Link to="/workspace/security">Security</Link><Link to="/workspace/risk-graph">Risk Graph</Link><Link to="/workspace/integrations">Integrations</Link><Link to="/workspace/team">Team</Link><Link to="/workspace/billing">Billing</Link><Link to="/workspace/settings">Settings</Link></nav></aside><section className="platform-main"><header className="platform-topbar"><span><i className="live-dot"/>Cypheris Security Fabric</span><Link to="/workspace/overview">Open command center</Link></header><main className="platform-content"><div className="page-heading"><div><span>CYPHERIS / PLATFORM</span><h1>Security operations, connected.</h1><p>Cypheris is organized as a real product surface: the home layer leads into specialized pages for detection, response, intelligence, risk, reporting and administration.</p></div><Link className="primary-button" to="/workspace/integrations">Connect environment</Link></div><div className="platform-home-grid">{modules.map(([title,path,description],i)=><Link className="platform-module" to={path} key={path}><span className="module-index">{String(i+1).padStart(2,"0")}</span><div><strong>{title}</strong><p>{description}</p></div><b>→</b></Link>)}</div><div className="two-column"><section className="data-card"><div className="card-head"><span>Architecture</span><small>How Cypheris connects</small></div><div className="pipeline"><span>01 Workspace identity</span><span>02 Telemetry &amp; integrations</span><span>03 Context graph</span><span>04 Risk prioritization</span><span>05 Investigation &amp; response</span></div></section><section className="data-card"><div className="card-head"><span>Product direction</span><small>Built to expand</small></div><p>The platform can grow into a commercial security product without forcing every capability into one dashboard. Each domain has its own route, state, evidence and future automation layer.</p></section></div></main></section></div>}
