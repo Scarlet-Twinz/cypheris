@@ -1,0 +1,25 @@
+# Local Python environments
+**/venv/
+**/.venv/
+**/env/
+**/ENV/
+
+# Python caches
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Node/build output
+**/node_modules/
+**/dist/
+**/build/
+**/.next/
+**/.vite/
+
+# Git and local configuration
+.git/
+.env
+.env.*
+!.env.example
