@@ -1,0 +1,155 @@
+.traffic-card{
+
+    background:#132845;
+
+    border:1px solid rgba(255,255,255,.05);
+
+    border-radius:24px;
+
+    padding:28px;
+
+}
+
+.traffic-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:30px;
+
+}
+
+.traffic-header small{
+
+    color:#89a5ca;
+
+    font-size:12px;
+
+    letter-spacing:1px;
+
+}
+
+.traffic-header h2{
+
+    color:white;
+
+    margin-top:8px;
+
+    font-size:34px;
+
+}
+
+.live-badge{
+
+    color:#27d980;
+
+    font-weight:700;
+
+    font-size:15px;
+
+}
+
+.traffic-chart{
+
+    height:260px;
+
+    display:flex;
+
+    align-items:flex-end;
+
+    justify-content:space-between;
+
+    gap:10px;
+
+    margin-bottom:30px;
+
+}
+
+.traffic-bar{
+
+    flex:1;
+
+    border-radius:14px 14px 0 0;
+
+    background:linear-gradient(
+        to top,
+        #1aa8ff,
+        #66d9ff
+    );
+
+    transition:.35s;
+
+}
+
+.traffic-bar:hover{
+
+    transform:scaleY(1.05);
+
+    filter:brightness(1.2);
+
+}
+
+.traffic-stats{
+
+    display:grid;
+
+    grid-template-columns:repeat(4,1fr);
+
+    gap:16px;
+
+}
+
+.traffic-stats div{
+
+    background:#183252;
+
+    border-radius:16px;
+
+    padding:16px;
+
+    text-align:center;
+
+}
+
+.traffic-stats strong{
+
+    display:block;
+
+    color:white;
+
+    font-size:24px;
+
+    margin-bottom:8px;
+
+}
+
+.traffic-stats span{
+
+    color:#89a5ca;
+
+    font-size:13px;
+
+}
+
+@media(max-width:900px){
+
+    .traffic-stats{
+
+        grid-template-columns:repeat(2,1fr);
+
+    }
+
+}
+
+@media(max-width:600px){
+
+    .traffic-stats{
+
+        grid-template-columns:1fr;
+
+    }
+
+}

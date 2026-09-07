@@ -1,0 +1,52 @@
+.dashboard-grid{
+
+    display:grid;
+
+    grid-template-columns:2fr 1fr;
+
+    gap:24px;
+
+    align-items:start;
+
+    margin-top:24px;
+
+}
+
+.dashboard-left,
+.dashboard-right{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:24px;
+
+}
+
+.dashboard-left > *,
+.dashboard-right > *{
+
+    width:100%;
+
+    border-radius:22px;
+
+    transition:.3s ease;
+
+}
+
+.dashboard-left > *:hover,
+.dashboard-right > *:hover{
+
+    transform:translateY(-3px);
+
+}
+
+@media(max-width:1200px){
+
+    .dashboard-grid{
+
+        grid-template-columns:1fr;
+
+    }
+
+}

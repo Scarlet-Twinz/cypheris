@@ -1,0 +1,115 @@
+/* =========================================================
+   CYPHERIS APPLICATION SHELL
+   Stable layout system for the entire platform
+   ========================================================= */
+
+:root {
+    --cypher-sidebar-width: 278px;
+    --cypher-sidebar-collapsed-width: 82px;
+    --cypher-shell-bg: #050b14;
+    --cypher-content-bg: #07101c;
+}
+
+/* =========================================================
+   ROOT LAYOUT
+   ========================================================= */
+
+.app-layout {
+    width: 100%;
+    min-height: 100vh;
+
+    display: flex;
+
+    background:
+        radial-gradient(
+            circle at 85% 0%,
+            rgba(45, 132, 255, 0.055),
+            transparent 30%
+        ),
+        var(--cypher-shell-bg);
+
+    color: #f4f8ff;
+}
+
+/* =========================================================
+   MAIN AREA
+   ========================================================= */
+
+.app-main {
+    min-width: 0;
+    min-height: 100vh;
+
+    flex: 1;
+
+    margin-left: var(--cypher-sidebar-width);
+
+    transition:
+        margin-left 260ms cubic-bezier(.22, 1, .36, 1);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(7, 16, 28, 0.96),
+            rgba(4, 10, 18, 0.98)
+        );
+}
+
+/* =========================================================
+   CONTENT CONTAINER
+   ========================================================= */
+
+.app-content {
+    width: 100%;
+    min-width: 0;
+    min-height: 100vh;
+
+    box-sizing: border-box;
+}
+
+/* =========================================================
+   COLLAPSED SIDEBAR
+   ========================================================= */
+
+.app-layout.sidebar-collapsed .app-main {
+    margin-left: var(--cypher-sidebar-collapsed-width);
+}
+
+/* =========================================================
+   IMPORTANT:
+   Prevent children from forcing horizontal overflow.
+   This helps stop large dashboard components from
+   breaking the entire application shell.
+   ========================================================= */
+
+.app-main,
+.app-content {
+    overflow-x: clip;
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 1100px) {
+    :root {
+        --cypher-sidebar-width: 250px;
+    }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 760px) {
+    .app-main {
+        margin-left: 0;
+    }
+
+    .app-layout.sidebar-collapsed .app-main {
+        margin-left: 0;
+    }
+
+    .app-content {
+        min-height: 100vh;
+    }
+}

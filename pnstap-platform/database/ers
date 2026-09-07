@@ -1,0 +1,26 @@
+                                            Table "public.companies"
+      Column       |            Type             | Collation | Nullable |                Default                
+-------------------+-----------------------------+-----------+----------+---------------------------------------
+ id                | integer                     |           | not null | nextval('companies_id_seq'::regclass)
+ company_name      | character varying(150)      |           | not null | 
+ industry          | character varying(100)      |           |          | 
+ country           | character varying(100)      |           |          | 
+ email             | character varying(255)      |           | not null | 
+ phone             | character varying(30)       |           |          | 
+ website           | character varying(255)      |           |          | 
+ subscription_plan | character varying(30)       |           | not null | 'Free'::character varying
+ status            | character varying(20)       |           | not null | 'Active'::character varying
+ created_at        | timestamp without time zone |           | not null | CURRENT_TIMESTAMP
+ updated_at        | timestamp without time zone |           | not null | CURRENT_TIMESTAMP
+Indexes:
+    "companies_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "alerts" CONSTRAINT "fk_alerts_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    TABLE "audit_logs" CONSTRAINT "fk_audit_logs_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    TABLE "network_flows" CONSTRAINT "fk_network_flows_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    TABLE "notifications" CONSTRAINT "fk_notifications_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    TABLE "subscriptions" CONSTRAINT "fk_subscriptions_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    TABLE "users" CONSTRAINT "fk_users_company" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+Triggers:
+    companies_updated_at BEFORE UPDATE ON companies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+

@@ -1,0 +1,93 @@
+.activity-card{
+
+    background:#132746;
+
+    border:1px solid rgba(255,255,255,.05);
+
+    border-radius:24px;
+
+    padding:26px;
+
+}
+
+.activity-header{
+
+    margin-bottom:20px;
+
+}
+
+.activity-header small{
+
+    color:#8ea6c6;
+
+}
+
+.activity-header h2{
+
+    color:white;
+
+    margin-top:6px;
+
+}
+
+.activity-item{
+
+    display:flex;
+
+    gap:16px;
+
+    padding:18px 0;
+
+    border-bottom:1px solid rgba(255,255,255,.05);
+
+}
+
+.activity-item:last-child{
+
+    border-bottom:none;
+
+}
+
+.activity-dot{
+
+    width:12px;
+
+    height:12px;
+
+    border-radius:50%;
+
+    margin-top:6px;
+
+    background:#1aa8ff;
+
+}
+
+.activity-content{
+
+    flex:1;
+
+}
+
+.activity-content h4{
+
+    color:white;
+
+    margin-bottom:4px;
+
+}
+
+.activity-content p{
+
+    color:#9fb2ca;
+
+    line-height:1.6;
+
+}
+
+.activity-item span{
+
+    color:#7dd3fc;
+
+    font-size:13px;
+
+}

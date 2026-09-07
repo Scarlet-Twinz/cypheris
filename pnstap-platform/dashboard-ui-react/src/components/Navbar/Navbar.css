@@ -1,0 +1,117 @@
+.navbar{
+    height:80px;
+    background:#0d1728;
+    border-bottom:1px solid rgba(255,255,255,.06);
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    padding:0 32px;
+}
+
+.navbar-left{
+    display:flex;
+    flex-direction:column;
+}
+
+.navbar-greeting{
+    color:#8fb4d9;
+    font-size:13px;
+}
+
+.navbar-left h2{
+    margin:3px 0;
+    color:white;
+    font-size:28px;
+}
+
+.navbar-left small{
+    color:#7f97b5;
+}
+
+.navbar-center{
+    flex:1;
+    display:flex;
+    justify-content:center;
+}
+
+.command-search{
+    width:420px;
+    height:46px;
+
+    background:#16243a;
+
+    border-radius:14px;
+
+    display:flex;
+    align-items:center;
+
+    padding:0 16px;
+
+    gap:12px;
+}
+
+.command-search svg{
+    color:#8fb4d9;
+    font-size:18px;
+}
+
+.command-search input{
+    flex:1;
+    border:none;
+    outline:none;
+    background:transparent;
+    color:white;
+    font-size:15px;
+}
+
+.command-search input::placeholder{
+    color:#7d97b8;
+}
+
+.navbar-right{
+    display:flex;
+    align-items:center;
+    gap:18px;
+}
+
+.icon-btn{
+    width:44px;
+    height:44px;
+
+    border:none;
+
+    border-radius:12px;
+
+    background:#16243a;
+
+    color:white;
+
+    cursor:pointer;
+
+    font-size:18px;
+}
+
+.pulse{
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    background:#16243a;
+
+    padding:10px 16px;
+
+    border-radius:12px;
+
+    color:white;
+}
+
+.pulse-dot{
+    width:10px;
+    height:10px;
+
+    border-radius:50%;
+
+    background:#2ecc71;
+}

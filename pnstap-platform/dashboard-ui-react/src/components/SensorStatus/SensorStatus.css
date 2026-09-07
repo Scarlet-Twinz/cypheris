@@ -1,0 +1,83 @@
+.sensor-status{
+
+    background:#132746;
+
+    border-radius:22px;
+
+    padding:24px;
+
+    border:1px solid rgba(255,255,255,.06);
+
+}
+
+.sensor-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:20px;
+
+}
+
+.sensor-header h2{
+
+    color:white;
+
+    margin-top:6px;
+
+}
+
+.sensor-header small{
+
+    color:#8ea6c6;
+
+}
+
+.sensor-header span{
+
+    color:#19a7ff;
+
+}
+
+.sensor-row{
+
+    display:grid;
+
+    grid-template-columns:2fr 1fr 1fr;
+
+    align-items:center;
+
+    padding:16px 0;
+
+    border-bottom:1px solid rgba(255,255,255,.05);
+
+}
+
+.sensor-row:last-child{
+
+    border-bottom:none;
+
+}
+
+.sensor-row h4{
+
+    color:white;
+
+    margin-bottom:4px;
+
+}
+
+.sensor-row small{
+
+    color:#8ea6c6;
+
+}
+
+.sensor-row strong{
+
+    color:#34d399;
+
+}
