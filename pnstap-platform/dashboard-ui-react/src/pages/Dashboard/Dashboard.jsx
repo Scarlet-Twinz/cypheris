@@ -1,1922 +1,356 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-
 import "./Dashboard.css";
 import "cesium/Build/Cesium/Widgets/widgets.css";
-
 import cypherisLogo from "../../assets/logo/cypheris-logo.jpg";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-if (!API_BASE_URL) {
-  console.warn(
-    "VITE_API_BASE_URL is not configured. Add it to your frontend .env file."
-  );
+const NAV = [
+  ["Overview", "⌂"],
+  ["Threat Intelligence", "⚡"],
+  ["Assets", "◈"],
+  ["Incidents", "!"],
+  ["Analytics", "◫"],
+  ["LYROMI", "✦"],
+  ["Billing", "◇"],
+  ["Settings", "⚙"],
+];
+
+function stored(key) {
+  try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; }
 }
 
-/* ============================================================
-   HELPERS
-   ============================================================ */
+function token() { return localStorage.getItem("access_token") || localStorage.getItem("token") || ""; }
 
-const safeString = (value, fallback = "") => {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
+function text(value, fallback = "") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "object") return value.name || value.title || value.message || value.label || fallback;
+  return String(value);
+}
 
-  if (typeof value === "string") {
-    return value;
-  }
+function number(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return String(value);
-  }
+function severity(event) {
+  const value = text(event?.severity || event?.level || event?.priority).toLowerCase();
+  return ["critical", "high", "medium", "low"].includes(value) ? value : "info";
+}
 
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => safeString(item))
-      .filter(Boolean)
-      .join(", ");
-  }
+function relative(value) {
+  if (!value) return "recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recent";
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
-  if (typeof value === "object") {
-    return (
-      value.name ||
-      value.title ||
-      value.label ||
-      value.message ||
-      value.text ||
-      value.location ||
-      value.id ||
-      fallback
-    );
-  }
-
-  return fallback;
-};
-
-const numericValue = (value, fallback = 0) => {
-  const number = Number(value);
-
-  return Number.isFinite(number)
-    ? number
-    : fallback;
-};
-
-const getSeverity = (event) => {
-  const severity = safeString(
-    event?.severity ||
-      event?.level ||
-      event?.priority ||
-      ""
-  ).toLowerCase();
-
-  if (severity === "critical") return "critical";
-  if (severity === "high") return "high";
-  if (severity === "medium") return "medium";
-  if (severity === "low") return "low";
-
-  return "info";
-};
-
-const getGreeting = () => {
+function greeting() {
   const hour = new Date().getHours();
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+}
 
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
+function Globe({ signals = [], threats = [] }) {
+  const host = useRef(null);
+  const viewer = useRef(null);
+  const entities = useRef([]);
+  const [status, setStatus] = useState("INITIALIZING");
 
-  return "Good evening";
-};
-
-/* ============================================================
-   CESIUM GLOBE
-   ============================================================ */
-
-const Globe = ({
-  signals = [],
-  threats = [],
-}) => {
-  const globeRef = useRef(null);
-  const viewerRef = useRef(null);
-  const entitiesRef = useRef([]);
-
-  /*
-   * Create Cesium viewer ONCE.
-   *
-   * IMPORTANT:
-   * This is intentionally using a minimal Cesium
-   * configuration first so we can verify that the
-   * Cesium WebGL viewer itself constructs correctly.
-   */
   useEffect(() => {
-    let cancelled = false;
-
-    const createViewer = async () => {
+    let disposed = false;
+    let instance = null;
+    const start = async () => {
       try {
         const Cesium = await import("cesium");
+        if (disposed || !host.current) return;
 
-        if (cancelled || !globeRef.current) {
-          return;
-        }
+        instance = new Cesium.Viewer(host.current, {
+          animation: false,
+          timeline: false,
+          fullscreenButton: false,
+          geocoder: false,
+          homeButton: false,
+          sceneModePicker: false,
+          navigationHelpButton: false,
+          baseLayerPicker: false,
+          infoBox: false,
+          selectionIndicator: false,
+          scene3DOnly: true,
+          terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+          imageryProvider: new Cesium.OpenStreetMapImageryProvider({
+            url: "https://tile.openstreetmap.org/",
+          }),
+        });
 
-        /*
-         * Minimal Cesium configuration.
-         *
-         * We are deliberately NOT using:
-         * - fromWorldImagery()
-         * - custom imagery layers
-         * - lighting
-         * - atmosphere
-         *
-         * until the basic viewer is confirmed working.
-         */
-        const viewer = new Cesium.Viewer(
-          globeRef.current,
-          {
-            animation: false,
-            timeline: false,
-            fullscreenButton: false,
-            geocoder: false,
-            homeButton: false,
-            sceneModePicker: false,
-            navigationHelpButton: false,
-            baseLayerPicker: false,
-            infoBox: false,
-            selectionIndicator: false,
-
-            terrainProvider:
-              new Cesium.EllipsoidTerrainProvider(),
-
-            baseLayer: false,
-          }
-        );
-
-        if (cancelled) {
-          viewer.destroy();
-          return;
-        }
-
-        viewer.scene.backgroundColor =
-          Cesium.Color.fromCssColorString(
-            "#050A14"
-          );
-
-        viewer.camera.setView({
-          destination:
-            Cesium.Cartesian3.fromDegrees(
-              0,
-              20,
-              20000000
-            ),
-
+        if (disposed) { instance.destroy(); return; }
+        viewer.current = instance;
+        instance.scene.backgroundColor = Cesium.Color.fromCssColorString("#050912");
+        instance.scene.globe.show = true;
+        instance.scene.globe.enableLighting = false;
+        instance.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0c1827");
+        instance.scene.fog.enabled = false;
+        instance.camera.setView({
+          destination: Cesium.Cartesian3.fromDegrees(8, 18, 20500000),
           orientation: {
             heading: 0,
-
-            pitch:
-              Cesium.Math.toRadians(-90),
-
+            pitch: Cesium.Math.toRadians(-90),
             roll: 0,
           },
         });
-
-        viewerRef.current = viewer;
+        instance.resize();
+        setStatus("LIVE");
       } catch (error) {
-        console.error(
-          "Cesium initialization failed:",
-          error
-        );
+        console.error("Cesium initialization failed:", error);
+        setStatus("UNAVAILABLE");
       }
     };
-
-    createViewer();
-
+    start();
     return () => {
-      cancelled = true;
-
-      if (viewerRef.current) {
-        viewerRef.current.destroy();
-        viewerRef.current = null;
-      }
+      disposed = true;
+      if (instance && !instance.isDestroyed()) instance.destroy();
+      viewer.current = null;
     };
   }, []);
 
-  /*
-   * Update globe entities without recreating viewer.
-   */
   useEffect(() => {
-    const updateEntities = async () => {
-      const viewer = viewerRef.current;
-
-      if (!viewer) {
-        return;
-      }
-
+    const instance = viewer.current;
+    if (!instance) return;
+    let cancelled = false;
+    const update = async () => {
       const Cesium = await import("cesium");
-
-      /*
-       * Remove previous dynamic entities.
-       */
-      entitiesRef.current.forEach((entity) => {
-        viewer.entities.remove(entity);
-      });
-
-      entitiesRef.current = [];
-
-      /*
-       * Signals.
-       */
-      signals.forEach((signal) => {
-        const lat = numericValue(
-          signal?.lat ??
-            signal?.latitude,
-          NaN
-        );
-
-        const lon = numericValue(
-          signal?.lon ??
-            signal?.lng ??
-            signal?.longitude,
-          NaN
-        );
-
-        if (
-          !Number.isFinite(lat) ||
-          !Number.isFinite(lon)
-        ) {
-          return;
-        }
-
-        const entity =
-          viewer.entities.add({
-            position:
-              Cesium.Cartesian3.fromDegrees(
-                lon,
-                lat,
-                100000
-              ),
-
-            point: {
-              pixelSize: 9,
-
-              color:
-                Cesium.Color.CYAN.withAlpha(
-                  0.95
-                ),
-
-              outlineColor:
-                Cesium.Color.WHITE.withAlpha(
-                  0.65
-                ),
-
-              outlineWidth: 2,
-
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-
-            label: {
-              text: safeString(
-                signal?.name ||
-                  signal?.sensor_name ||
-                  signal?.sensor ||
-                  "Signal"
-              ),
-
-              font:
-                "12px Inter, Segoe UI, sans-serif",
-
-              fillColor:
-                Cesium.Color.WHITE,
-
-              outlineColor:
-                Cesium.Color.BLACK,
-
-              outlineWidth: 3,
-
-              style:
-                Cesium.LabelStyle
-                  .FILL_AND_OUTLINE,
-
-              pixelOffset:
-                new Cesium.Cartesian2(
-                  0,
-                  -20
-                ),
-
-              showBackground: true,
-
-              backgroundColor:
-                Cesium.Color.BLACK.withAlpha(
-                  0.55
-                ),
-
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-          });
-
-        entitiesRef.current.push(entity);
-      });
-
-      /*
-       * Threats.
-       */
-      threats.forEach((threat) => {
-        const lat = numericValue(
-          threat?.lat ??
-            threat?.latitude,
-          NaN
-        );
-
-        const lon = numericValue(
-          threat?.lon ??
-            threat?.lng ??
-            threat?.longitude,
-          NaN
-        );
-
-        if (
-          !Number.isFinite(lat) ||
-          !Number.isFinite(lon)
-        ) {
-          return;
-        }
-
-        const entity =
-          viewer.entities.add({
-            position:
-              Cesium.Cartesian3.fromDegrees(
-                lon,
-                lat,
-                120000
-              ),
-
-            point: {
-              pixelSize: 13,
-
-              color:
-                Cesium.Color.RED.withAlpha(
-                  0.95
-                ),
-
-              outlineColor:
-                Cesium.Color.RED.withAlpha(
-                  0.4
-                ),
-
-              outlineWidth: 4,
-
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-
-            label: {
-              text: safeString(
-                threat?.title ||
-                  threat?.name ||
-                  threat?.message ||
-                  "Threat"
-              ),
-
-              font:
-                "12px Inter, Segoe UI, sans-serif",
-
-              fillColor:
-                Cesium.Color.RED,
-
-              outlineColor:
-                Cesium.Color.BLACK,
-
-              outlineWidth: 3,
-
-              style:
-                Cesium.LabelStyle
-                  .FILL_AND_OUTLINE,
-
-              pixelOffset:
-                new Cesium.Cartesian2(
-                  0,
-                  -25
-                ),
-
-              showBackground: true,
-
-              backgroundColor:
-                Cesium.Color.BLACK.withAlpha(
-                  0.6
-                ),
-
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-          });
-
-        entitiesRef.current.push(entity);
-      });
+      if (cancelled || instance.isDestroyed()) return;
+      entities.current.forEach((entity) => instance.entities.remove(entity));
+      entities.current = [];
+      const add = (item, color, size, label) => {
+        const lat = number(item?.lat ?? item?.latitude);
+        const lon = number(item?.lon ?? item?.lng ?? item?.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+        const entity = instance.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lon, lat, 100000),
+          point: {
+            pixelSize: size,
+            color,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.8),
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: label,
+            font: "11px Inter, Segoe UI, sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromCssColorString("#07101c").withAlpha(0.85),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        });
+        entities.current.push(entity);
+      };
+      signals.forEach((item) => add(item, Cesium.Color.CYAN.withAlpha(0.95), 8, text(item?.name || item?.sensor_name || item?.sensor, "Signal")));
+      threats.forEach((item) => add(item, Cesium.Color.RED.withAlpha(0.95), 12, text(item?.title || item?.name || item?.message, "Threat")));
     };
-
-    updateEntities();
+    update();
+    return () => { cancelled = true; };
   }, [signals, threats]);
 
   return (
-    <div
-      ref={globeRef}
-      className="cesium-globe"
-    />
-  );
-};
-
-/* ============================================================
-   MAIN DASHBOARD
-   ============================================================ */
-
-const Dashboard = () => {
-  const navigate = useNavigate();
-
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
-  const [userName, setUserName] =
-    useState("Operator");
-
-  const [companyName, setCompanyName] =
-    useState("");
-
-  const [time, setTime] =
-    useState(new Date());
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState(null);
-
-  const [metrics, setMetrics] =
-    useState({
-      users: 0,
-      activeUsers: 0,
-      threats: 0,
-      incidents: 0,
-      events: 0,
-      securityScore: 0,
-    });
-
-  const [activity, setActivity] =
-    useState([]);
-
-  const [signals, setSignals] =
-    useState([]);
-
-  const [integrations, setIntegrations] =
-    useState({
-      sensors: 0,
-      clouds: 0,
-      apis: 0,
-    });
-
-  const [threatFeed, setThreatFeed] =
-    useState([]);
-
-  const [resources, setResources] =
-    useState(null);
-
-  const [lyromiMessages, setLyromiMessages] =
-    useState([]);
-
-  const [lyromiInput, setLyromiInput] =
-    useState("");
-
-  const [lyromiLoading, setLyromiLoading] =
-    useState(false);
-
-  /* ==========================================================
-     AUTH
-     ========================================================== */
-
-  const getToken = useCallback(() => {
-    return (
-      localStorage.getItem(
-        "access_token"
-      ) ||
-      localStorage.getItem("token") ||
-      ""
-    );
-  }, []);
-
-  const getCompanyId = useCallback(() => {
-    try {
-      const company = JSON.parse(
-        localStorage.getItem(
-          "company"
-        ) || "{}"
-      );
-
-      return (
-        company.id ||
-        company.company_id ||
-        null
-      );
-    } catch {
-      return null;
-    }
-  }, []);
-
-  /* ==========================================================
-     FETCH DASHBOARD
-     ========================================================== */
-
-  const fetchDashboard = useCallback(
-    async () => {
-      try {
-        const token = getToken();
-
-        if (!token) {
-          navigate("/login");
-          return;
-        }
-
-        if (!API_BASE_URL) {
-          throw new Error(
-            "VITE_API_BASE_URL is not configured."
-          );
-        }
-
-        const headers = {
-          Authorization:
-            `Bearer ${token}`,
-        };
-
-        const dashboardRes =
-          await axios.get(
-            `${API_BASE_URL}/api/dashboard/`,
-            { headers }
-          );
-
-        const dashboardData =
-          dashboardRes.data?.data ||
-          dashboardRes.data ||
-          {};
-
-        setMetrics({
-          users: numericValue(
-            dashboardData.users ??
-              dashboardData.total_users
-          ),
-
-          activeUsers:
-            numericValue(
-              dashboardData.active_users
-            ),
-
-          threats:
-            numericValue(
-              dashboardData.threats ??
-                dashboardData.threat_count
-            ),
-
-          incidents:
-            numericValue(
-              dashboardData.incidents
-            ),
-
-          events:
-            numericValue(
-              dashboardData.events ??
-                dashboardData.event_count
-            ),
-
-          securityScore:
-            numericValue(
-              dashboardData.security_score ??
-                dashboardData.score
-            ),
-        });
-
-        const nextActivity =
-          Array.isArray(
-            dashboardData.activity
-          )
-            ? dashboardData.activity
-            : Array.isArray(
-                dashboardData.recent_activity
-              )
-            ? dashboardData.recent_activity
-            : [];
-
-        const nextSignals =
-          Array.isArray(
-            dashboardData.signals
-          )
-            ? dashboardData.signals
-            : [];
-
-        setActivity(nextActivity);
-        setSignals(nextSignals);
-
-        /*
-         * Backend-provided threat feed only.
-         */
-        setThreatFeed(
-          Array.isArray(
-            dashboardData.threat_feed
-          )
-            ? dashboardData.threat_feed
-            : Array.isArray(
-                dashboardData.threats_feed
-              )
-            ? dashboardData.threats_feed
-            : []
-        );
-
-        /*
-         * Backend-provided resources only.
-         */
-        setResources(
-          dashboardData.resources ||
-            dashboardData.system_resources ||
-            null
-        );
-
-        /*
-         * Integrations.
-         */
-        const companyId =
-          getCompanyId();
-
-        if (companyId) {
-          const integrationsRes =
-            await axios.get(
-              `${API_BASE_URL}/api/integrations/company/${companyId}`,
-              { headers }
-            );
-
-          const integrationsData =
-            integrationsRes.data?.integrations ||
-            integrationsRes.data ||
-            [];
-
-          let sensorCount = 0;
-          let cloudCount = 0;
-          let apiCount = 0;
-
-          if (
-            Array.isArray(
-              integrationsData
-            )
-          ) {
-            integrationsData.forEach(
-              (integration) => {
-                const type =
-                  safeString(
-                    integration?.type
-                  ).toUpperCase();
-
-                if (
-                  type === "SENSOR" ||
-                  type === "PNSTAP SENSOR"
-                ) {
-                  sensorCount++;
-                } else if (
-                  type === "CLOUD"
-                ) {
-                  cloudCount++;
-                } else if (
-                  type === "API" ||
-                  type === "SECURITY API"
-                ) {
-                  apiCount++;
-                }
-              }
-            );
-          }
-
-          setIntegrations({
-            sensors: sensorCount,
-            clouds: cloudCount,
-            apis: apiCount,
-          });
-        }
-
-        setError(null);
-      } catch (err) {
-        console.error(
-          "Dashboard synchronization error:",
-          err
-        );
-
-        setError(
-          err?.message ||
-            "Unable to synchronize security data."
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      getToken,
-      getCompanyId,
-      navigate,
-    ]
-  );
-
-  /* ==========================================================
-     LYROMI
-     ========================================================== */
-
-  const sendLyromiMessage =
-    async () => {
-      const message =
-        lyromiInput.trim();
-
-      if (!message || lyromiLoading) {
-        return;
-      }
-
-      setLyromiMessages(
-        (current) => [
-          ...current,
-          {
-            from: "user",
-            text: message,
-          },
-        ]
-      );
-
-      setLyromiInput("");
-      setLyromiLoading(true);
-
-      try {
-        const token =
-          getToken();
-
-        const response =
-          await axios.post(
-            `${API_BASE_URL}/api/lyromi/chat`,
-            {
-              message,
-            },
-            {
-              headers: {
-                "Content-Type":
-                  "application/json",
-
-                Authorization:
-                  `Bearer ${token}`,
-              },
-            }
-          );
-
-        const reply =
-          response.data?.reply ||
-          response.data?.response ||
-          response.data?.message ||
-          "LYROMI received your request.";
-
-        setLyromiMessages(
-          (current) => [
-            ...current,
-            {
-              from: "lyromi",
-              text: safeString(
-                reply,
-                "LYROMI received your request."
-              ),
-            },
-          ]
-        );
-      } catch (err) {
-        console.error(
-          "LYROMI error:",
-          err
-        );
-
-        setLyromiMessages(
-          (current) => [
-            ...current,
-            {
-              from: "lyromi",
-              text:
-                err?.response?.data
-                  ?.detail ||
-                err?.message ||
-                "LYROMI is temporarily unavailable.",
-            },
-          ]
-        );
-      } finally {
-        setLyromiLoading(false);
-      }
-    };
-
-  /* ==========================================================
-     EFFECTS
-     ========================================================== */
-
-  useEffect(() => {
-    try {
-      const user = JSON.parse(
-        localStorage.getItem(
-          "user"
-        ) || "{}"
-      );
-
-      setUserName(
-        user.name ||
-          user.full_name ||
-          user.fullName ||
-          "Operator"
-      );
-
-      setCompanyName(
-        user.company_name ||
-          user.company ||
-          ""
-      );
-    } catch {
-      setUserName("Operator");
-    }
-
-    fetchDashboard();
-
-    const dashboardInterval =
-      setInterval(
-        fetchDashboard,
-        30000
-      );
-
-    const clockInterval =
-      setInterval(
-        () =>
-          setTime(
-            new Date()
-          ),
-        1000
-      );
-
-    return () => {
-      clearInterval(
-        dashboardInterval
-      );
-
-      clearInterval(
-        clockInterval
-      );
-    };
-  }, [fetchDashboard]);
-
-  /* ==========================================================
-     LOGOUT
-     ========================================================== */
-
-  const handleLogout =
-    () => {
-      localStorage.removeItem(
-        "access_token"
-      );
-
-      localStorage.removeItem(
-        "token"
-      );
-
-      localStorage.removeItem(
-        "user"
-      );
-
-      localStorage.removeItem(
-        "company"
-      );
-
-      navigate("/login");
-    };
-
-  const handleRefresh =
-    () => {
-      setLoading(true);
-      fetchDashboard();
-    };
-
-  /* ==========================================================
-     THREAT CALCULATIONS
-     ========================================================== */
-
-  const severityCounts =
-    activity.reduce(
-      (counts, event) => {
-        const severity =
-          getSeverity(event);
-
-        if (
-          severity ===
-            "critical" ||
-          severity === "high" ||
-          severity === "medium" ||
-          severity === "low"
-        ) {
-          counts[severity]++;
-        }
-
-        return counts;
-      },
-      {
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-      }
-    );
-
-  const severityTotal =
-    Object.values(
-      severityCounts
-    ).reduce(
-      (sum, value) =>
-        sum + value,
-      0
-    );
-
-  const severityPercent =
-    (severity) => {
-      if (!severityTotal) {
-        return 0;
-      }
-
-      return Math.round(
-        (severityCounts[
-          severity
-        ] /
-          severityTotal) *
-          100
-      );
-    };
-
-  /* ==========================================================
-     GRAPH DATA
-     ========================================================== */
-
-  const graphPoints =
-    activity
-      .slice(0, 20)
-      .map(
-        (event, index) => {
-          const severity =
-            getSeverity(event);
-
-          const weight =
-            severity ===
-            "critical"
-              ? 100
-              : severity ===
-                "high"
-              ? 75
-              : severity ===
-                "medium"
-              ? 50
-              : severity ===
-                "low"
-              ? 25
-              : 15;
-
-          const x =
-            activity.length <= 1
-              ? 200
-              : (index /
-                  (activity.length -
-                    1)) *
-                400;
-
-          const y =
-            100 -
-            (weight *
-              0.75);
-
-          return {
-            x,
-            y,
-          };
-        }
-      );
-
-  const graphPolyline =
-    graphPoints
-      .map(
-        ({ x, y }) =>
-          `${x},${y}`
-      )
-      .join(" ");
-
-  /* ==========================================================
-     RENDER
-     ========================================================== */
-
-  if (loading) {
-    return (
-      <div className="cypheris-dashboard loading-screen">
-        <div>
-          SYNCHRONIZING CONTROL PLANE
-          <span className="loading-dots">
-            ...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="cypheris-dashboard error-screen">
-        <div className="error-content">
-          <div className="error-icon">
-            !
-          </div>
-
-          <h2>
-            BACKEND CONNECTION WARNING
-          </h2>
-
-          <p>{error}</p>
-
-          <button
-            onClick={
-              handleRefresh
-            }
-          >
-            RETRY
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="cypheris-dashboard">
-
-      {/* ======================================================
-          SIDEBAR
-          ====================================================== */}
-
-      <aside
-        className={`sidebar ${
-          sidebarCollapsed
-            ? "collapsed"
-            : ""
-        }`}
-      >
-        <div className="sidebar-brand">
-          <img
-            src={cypherisLogo}
-            alt="Cypheris"
-            className="brand-logo"
-          />
-
-          {!sidebarCollapsed && (
-            <span className="brand-name">
-              CYPHERIS
-            </span>
-          )}
-        </div>
-
-        <nav className="sidebar-nav">
-          <ul>
-            <li className="active">
-              <span className="nav-icon">
-                ⌂
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Overview
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ⚡
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Threat Intelligence
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ◈
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Assets
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ◫
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Companies
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                !
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Incidents
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ◒
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Analytics
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ✦
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  LYROMI
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ◇
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Billing
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ⚙
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Settings
-                </span>
-              )}
-            </li>
-
-            <li>
-              <span className="nav-icon">
-                ?
-              </span>
-
-              {!sidebarCollapsed && (
-                <span>
-                  Help & Support
-                </span>
-              )}
-            </li>
-          </ul>
-        </nav>
-
-        <div className="sidebar-footer">
-          <button
-            onClick={
-              handleLogout
-            }
-            className="logout-btn"
-          >
-            <span className="nav-icon">
-              ⏻
-            </span>
-
-            {!sidebarCollapsed && (
-              <span>
-                Sign Out
-              </span>
-            )}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className="sidebar-toggle"
-          aria-label={
-            sidebarCollapsed
-              ? "Expand sidebar"
-              : "Collapse sidebar"
-          }
-          onClick={() =>
-            setSidebarCollapsed(
-              (current) =>
-                !current
-            )
-          }
-        >
-          {sidebarCollapsed
-            ? "→"
-            : "←"}
-        </button>
-      </aside>
-
-      {/* ======================================================
-          MAIN CONTENT
-          ====================================================== */}
-
-      <main className="main-content">
-
-        {/* HEADER */}
-
-        <header className="dashboard-header">
-          <div className="header-left">
-            <h1>
-              {getGreeting()},{" "}
-              <span className="user-name">
-                {userName}
-              </span>
-            </h1>
-
-            {companyName && (
-              <span className="company-badge">
-                {companyName}
-              </span>
-            )}
-          </div>
-
-          <div className="header-center">
-            <span className="live-badge">
-              ● LIVE
-            </span>
-
-            <span className="header-time">
-              {time.toLocaleTimeString()}
-            </span>
-          </div>
-
-          <div className="header-right">
-            <button
-              type="button"
-              className="header-btn"
-              aria-label="Search"
-            >
-              ⌕
-            </button>
-
-            <button
-              type="button"
-              className="header-btn"
-              aria-label="Notifications"
-            >
-              ◌
-            </button>
-
-            <button
-              type="button"
-              className="profile-btn"
-              aria-label="Profile"
-            >
-              <span className="profile-avatar">
-                {userName
-                  .charAt(0)
-                  .toUpperCase()}
-              </span>
-            </button>
-          </div>
-        </header>
-
-        {/* KPI STRIP */}
-
-        <div className="kpi-strip">
-          <div className="kpi-card">
-            <span className="kpi-label">
-              SENSORS
-            </span>
-
-            <span className="kpi-value">
-              {integrations.sensors}
-            </span>
-          </div>
-
-          <div className="kpi-card">
-            <span className="kpi-label">
-              CLOUD
-            </span>
-
-            <span className="kpi-value">
-              {integrations.clouds}
-            </span>
-          </div>
-
-          <div className="kpi-card">
-            <span className="kpi-label">
-              API SOURCES
-            </span>
-
-            <span className="kpi-value">
-              {integrations.apis}
-            </span>
-          </div>
-
-          <div className="kpi-card">
-            <span className="kpi-label">
-              THREATS
-            </span>
-
-            <span className="kpi-value threat">
-              {metrics.threats}
-            </span>
-          </div>
-
-          <div className="kpi-card">
-            <span className="kpi-label">
-              SECURITY SCORE
-            </span>
-
-            <span className="kpi-value score">
-              {metrics.securityScore}
-              %
-            </span>
-          </div>
-        </div>
-
-        {/* ====================================================
-            GLOBE + ACTIVITY
-            ==================================================== */}
-
-        <div className="dashboard-grid">
-
-          <div className="globe-container">
-
-            <Globe
-              signals={signals}
-              threats={activity.filter(
-                (event) =>
-                  getSeverity(
-                    event
-                  ) ===
-                  "critical"
-              )}
-            />
-
-            <div className="globe-overlay">
-              <span className="globe-status">
-                GLOBAL SECURITY MAP
-              </span>
-
-              <span className="globe-live">
-                ● LIVE
-              </span>
-            </div>
-
-            <div className="globe-footer">
-              <span>
-                {signals.length}{" "}
-                active signals
-              </span>
-
-              <span>
-                {metrics.threats}{" "}
-                threats
-              </span>
-            </div>
-
-          </div>
-
-          {/* ACTIVITY */}
-
-          <div className="activity-panel">
-
-            <h3>
-              REAL-TIME ACTIVITY
-            </h3>
-
-            <div className="activity-list">
-
-              {activity.length === 0 ? (
-                <div className="empty-state">
-                  WAITING FOR TELEMETRY
-                </div>
-              ) : (
-                activity
-                  .slice(0, 7)
-                  .map(
-                    (
-                      event,
-                      index
-                    ) => {
-
-                      const severity =
-                        getSeverity(
-                          event
-                        );
-
-                      return (
-                        <div
-                          key={
-                            event.id ||
-                            event.event_id ||
-                            index
-                          }
-                          className={`activity-item ${severity}`}
-                        >
-
-                          <span className="activity-dot" />
-
-                          <div className="activity-content">
-
-                            <span className="activity-title">
-                              {safeString(
-                                event.title ||
-                                  event.message ||
-                                  event.name,
-                                "Security event"
-                              )}
-                            </span>
-
-                            <span className="activity-location">
-                              {safeString(
-                                event.location ||
-                                  event.source ||
-                                  event.origin,
-                                "Unknown source"
-                              )}
-                            </span>
-
-                            <span className="activity-time">
-                              {safeString(
-                                event.timestamp ||
-                                  event.created_at ||
-                                  event.time,
-                                "Recent"
-                              )}
-                            </span>
-
-                          </div>
-
-                        </div>
-                      );
-                    }
-                  )
-              )}
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* ====================================================
-            BOTTOM GRID
-            ==================================================== */}
-
-        <div className="bottom-grid">
-
-          {/* LYROMI */}
-
-          <div className="lyromi-panel">
-
-            <div className="lyromi-header">
-
-              <div className="lyromi-mark">
-                ✦
-              </div>
-
-              <div>
-
-                <h4>
-                  LYROMI
-                </h4>
-
-                <small>
-                  Cypheris Intelligence Layer
-                </small>
-
-              </div>
-
-              <span className="lyromi-status">
-                ● ONLINE
-              </span>
-
-            </div>
-
-            <div className="lyromi-messages">
-
-              {lyromiMessages.length === 0 ? (
-
-                <div className="lyromi-empty">
-
-                  <div className="lyromi-empty-mark">
-                    ✦
-                  </div>
-
-                  <strong>
-                    Ask LYROMI
-                  </strong>
-
-                  <span>
-                    Your Cypheris intelligence layer
-                    is ready.
-                  </span>
-
-                </div>
-
-              ) : (
-
-                lyromiMessages.map(
-                  (
-                    msg,
-                    index
-                  ) => (
-
-                    <div
-                      key={index}
-                      className={`lyromi-msg ${msg.from}`}
-                    >
-
-                      <span className="lyromi-avatar">
-                        {msg.from ===
-                        "lyromi"
-                          ? "✦"
-                          : "YOU"}
-                      </span>
-
-                      <p>
-                        {safeString(
-                          msg.text
-                        )}
-                      </p>
-
-                    </div>
-
-                  )
-                )
-
-              )}
-
-              {lyromiLoading && (
-
-                <div className="lyromi-msg lyromi">
-
-                  <span className="lyromi-avatar">
-                    ✦
-                  </span>
-
-                  <p className="typing">
-                    ...
-                  </p>
-
-                </div>
-
-              )}
-
-            </div>
-
-            <div className="lyromi-input-area">
-
-              <input
-                type="text"
-                placeholder="Ask LYROMI..."
-                value={
-                  lyromiInput
-                }
-                onChange={(event) =>
-                  setLyromiInput(
-                    event.target
-                      .value
-                  )
-                }
-                onKeyDown={(
-                  event
-                ) => {
-                  if (
-                    event.key ===
-                    "Enter"
-                  ) {
-                    sendLyromiMessage();
-                  }
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={
-                  sendLyromiMessage
-                }
-                disabled={
-                  lyromiLoading
-                }
-              >
-                {lyromiLoading
-                  ? "..."
-                  : "Send"}
-              </button>
-
-            </div>
-
-          </div>
-
-          {/* SECURITY GRAPH */}
-
-          <div className="graph-panel">
-
-            <h4>
-              SECURITY OVERVIEW
-            </h4>
-
-            <div className="graph-container">
-
-              {graphPoints.length > 0 ? (
-
-                <svg
-                  viewBox="0 0 400 100"
-                  className="security-graph"
-                  preserveAspectRatio="none"
-                >
-
-                  <polyline
-                    points={
-                      graphPolyline
-                    }
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    opacity="0.7"
-                  />
-
-                  {graphPoints.map(
-                    (
-                      point,
-                      index
-                    ) => (
-
-                      <circle
-                        key={index}
-                        cx={
-                          point.x
-                        }
-                        cy={
-                          point.y
-                        }
-                        r="2"
-                        fill="currentColor"
-                      />
-
-                    )
-                  )}
-
-                </svg>
-
-              ) : (
-
-                <div className="empty-state">
-                  TELEMETRY STREAM
-                </div>
-
-              )}
-
-            </div>
-
-          </div>
-
-          {/* THREAT DISTRIBUTION */}
-
-          <div className="threat-distribution">
-
-            <h4>
-              THREAT CATEGORIES
-            </h4>
-
-            <div className="threat-bars">
-
-              {[
-                "critical",
-                "high",
-                "medium",
-                "low",
-              ].map(
-                (severity) => {
-
-                  const percentage =
-                    severityPercent(
-                      severity
-                    );
-
-                  return (
-
-                    <div
-                      className="threat-bar"
-                      key={
-                        severity
-                      }
-                    >
-
-                      <span>
-                        {severity
-                          .charAt(
-                            0
-                          )
-                          .toUpperCase() +
-                          severity.slice(
-                            1
-                          )}
-                      </span>
-
-                      <div className="bar-bg">
-
-                        <div
-                          className={`bar-fill ${severity}`}
-                          style={{
-                            width: `${percentage}%`,
-                          }}
-                        />
-
-                      </div>
-
-                      <span>
-                        {percentage}%
-                      </span>
-
-                    </div>
-
-                  );
-                }
-              )}
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* ====================================================
-            RESOURCES + THREAT FEED
-            ==================================================== */}
-
-        {(resources ||
-          threatFeed.length >
-            0) && (
-
-          <div className="footer-grid">
-
-            {resources && (
-
-              <div className="system-resources">
-
-                <h4>
-                  SYSTEM RESOURCES
-                </h4>
-
-                {Object.entries(
-                  resources
-                ).map(
-                  ([
-                    name,
-                    value,
-                  ]) => {
-
-                    const percentage =
-                      Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          numericValue(
-                            value
-                          )
-                        )
-                      );
-
-                    return (
-
-                      <div
-                        className="resource-bar"
-                        key={
-                          name
-                        }
-                      >
-
-                        <span>
-                          {safeString(
-                            name
-                          )}
-                        </span>
-
-                        <div className="resource-bg">
-
-                          <div
-                            className="resource-fill"
-                            style={{
-                              width: `${percentage}%`,
-                            }}
-                          />
-
-                        </div>
-
-                        <span>
-                          {percentage}%
-                        </span>
-
-                      </div>
-
-                    );
-                  }
-                )}
-
-              </div>
-
-            )}
-
-            {threatFeed.length >
-              0 && (
-
-              <div className="threat-feed">
-
-                <h4>
-                  THREAT INTELLIGENCE FEED
-                </h4>
-
-                <div className="feed-items">
-
-                  {threatFeed
-                    .slice(0, 6)
-                    .map(
-                      (
-                        item,
-                        index
-                      ) => {
-
-                        const severity =
-                          getSeverity(
-                            item
-                          );
-
-                        return (
-
-                          <div
-                            key={
-                              item.id ||
-                              item.event_id ||
-                              index
-                            }
-                            className={`feed-item ${severity}`}
-                          >
-
-                            {safeString(
-                              item.title ||
-                                item.message ||
-                                item.text ||
-                                item.name,
-                              "Threat intelligence update"
-                            )}
-
-                          </div>
-
-                        );
-
-                      }
-                    )}
-
-                </div>
-
-              </div>
-
-            )}
-
-          </div>
-
-        )}
-
-      </main>
-
+    <div className="globe-host">
+      <div ref={host} className="cesium-globe" />
+      {status === "UNAVAILABLE" && <div className="globe-fallback">Cesium could not initialize. Check the browser console for the WebGL error.</div>}
+      <div className="globe-chrome top-left"><span>GLOBAL SECURITY FIELD</span><b><i /> {status}</b></div>
+      <div className="globe-chrome bottom-left"><span>{signals.length} active signals</span><span>{threats.length} critical threats</span></div>
     </div>
   );
-};
+}
 
-export default Dashboard;
+function Activity({ items }) {
+  return (
+    <section className="activity-panel">
+      <div className="section-head">
+        <div><span>LIVE TELEMETRY</span><h2>Security activity</h2></div>
+        <span className="head-live"><i /> LIVE</span>
+      </div>
+      <div className="activity-stream">
+        {items.length === 0 ? (
+          <div className="empty-activity"><span>◌</span><strong>Waiting for telemetry</strong><small>Connected sensors and integrations will appear here as events arrive.</small></div>
+        ) : items.slice(0, 8).map((event, index) => (
+          <div className={`activity-row ${severity(event)}`} key={event.id || event.event_id || index}>
+            <i className="activity-marker" />
+            <div><strong>{text(event.title || event.alert_type || event.message, "Security event")}</strong><small>{text(event.description || event.location || event.source, "Cypheris security network")}</small></div>
+            <time>{relative(event.timestamp || event.created_at || event.detected_at)}</time>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Lyromi({ userName }) {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const send = async () => {
+    const value = input.trim();
+    if (!value || loading) return;
+    setMessages((current) => [...current, { role: "user", text: value }]);
+    setInput("");
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/lyromi/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+        },
+        body: JSON.stringify({ message: value }),
+      });
+      let data = {};
+      try { data = await response.json(); } catch { data = {}; }
+      if (!response.ok) throw new Error(data?.detail || "LYROMI could not process the request.");
+      setMessages((current) => [...current, { role: "lyromi", text: text(data?.reply || data?.response, "LYROMI returned no analysis.") }]);
+    } catch (error) {
+      setMessages((current) => [...current, { role: "lyromi", text: error.message || "LYROMI is temporarily unavailable." }]);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <section className="lyromi-panel">
+      <div className="section-head">
+        <div><span>INTELLIGENCE ENGINE</span><h2>LYROMI</h2></div>
+        <span className="head-live ai"><i /> READY</span>
+      </div>
+      <div className="lyromi-body">
+        <div className="lyromi-identity">
+          <img src={cypherisLogo} alt="Cypheris" />
+          <div><strong>LYROMI</strong><small>Cypheris Intelligence Engine</small></div>
+          <span className="lyromi-online">ONLINE</span>
+        </div>
+        <div className="chat-stream">
+          {messages.length === 0 && (
+            <div className="chat-welcome">
+              <img src={cypherisLogo} alt="Cypheris" />
+              <strong>{greeting()}, {userName || "Operator"}.</strong>
+              <p>Ask LYROMI about the security context in your Cypheris workspace.</p>
+            </div>
+          )}
+          {messages.map((message, index) => (
+            <div className={`chat-message ${message.role}`} key={index}>
+              {message.role === "lyromi" && <img src={cypherisLogo} alt="LYROMI" />}
+              <div><span>{message.role === "user" ? "YOU" : "LYROMI"}</span><p>{message.text}</p></div>
+            </div>
+          ))}
+          {loading && <div className="chat-message lyromi"><img src={cypherisLogo} alt="LYROMI" /><div><span>LYROMI</span><p className="typing">Analyzing security context…</p></div></div>}
+        </div>
+        <div className="lyromi-composer">
+          <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && send()} placeholder="Ask LYROMI about your environment…" aria-label="Ask LYROMI" />
+          <button type="button" onClick={send} disabled={!input.trim() || loading}>{loading ? "…" : "→"}</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const user = stored("user");
+  const company = stored("company");
+  const [collapsed, setCollapsed] = useState(false);
+  const [time, setTime] = useState(new Date());
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!token()) { navigate("/login", { replace: true }); return undefined; }
+    const clock = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(clock);
+  }, [navigate]);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/dashboard/`, { headers: { Authorization: `Bearer ${token()}` } });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload?.detail || "Unable to load security telemetry.");
+        if (active) { setData(payload?.data || payload); setError(""); }
+      } catch (err) { if (active) setError(err.message || "Unable to synchronize security telemetry."); }
+    };
+    load();
+    const refresh = setInterval(load, 30000);
+    return () => { active = false; clearInterval(refresh); };
+  }, []);
+
+  const activity = Array.isArray(data?.activity) ? data.activity : [];
+  const threats = activity.filter((item) => severity(item) === "critical");
+  const signalCount = number(data?.telemetry?.network_flows) + number(data?.telemetry?.notifications) + number(data?.telemetry?.sensors);
+  const initials = text(user?.name || user?.full_name, "Operator").slice(0, 1).toUpperCase();
+  const threatCounts = useMemo(() => ["critical", "high", "medium", "low"].map((level) => ({ level, count: activity.filter((item) => severity(item) === level).length })), [activity]);
+
+  const logout = () => {
+    ["access_token", "token", "user", "company"].forEach((key) => localStorage.removeItem(key));
+    navigate("/login", { replace: true });
+  };
+
+  if (error && !data) return <div className="dashboard-state"><strong>CYTHERIS CONTROL PLANE</strong><span>{error}</span><button onClick={() => window.location.reload()}>RETRY</button></div>;
+
+  return (
+    <div className={`cypheris-dashboard ${collapsed ? "is-collapsed" : ""}`}>
+      <aside className="sidebar">
+        <div className="brand"><img src={cypherisLogo} alt="Cypheris" /><div><strong>CYPHERIS</strong><small>DECODE YOUR SECURITY</small></div></div>
+        <div className="workspace-label"><span>WORKSPACE</span><strong>{text(company?.name || company?.company_name, "Security workspace")}</strong></div>
+        <nav>{NAV.map(([label, icon], index) => <button key={label} className={index === 0 ? "active" : ""} type="button"><span>{icon}</span><b>{label}</b></button>)}</nav>
+        <div className="sidebar-bottom"><div className="system-state"><i /> SYSTEM ONLINE</div><button className="logout" type="button" onClick={logout}>⏻ <b>Sign Out</b></button></div>
+        <button className="collapse" type="button" onClick={() => setCollapsed((value) => !value)} aria-label="Toggle sidebar">{collapsed ? "→" : "←"}</button>
+      </aside>
+
+      <main className="dashboard-main">
+        <header className="topbar">
+          <div><span>COMMAND CENTER</span><em>/</em><strong>SECURITY OVERVIEW</strong></div>
+          <div className="topbar-right"><span className="live"><i /> LIVE</span><time>{time.toLocaleTimeString()}</time><span className="avatar">{initials}</span></div>
+        </header>
+
+        <div className="dashboard-content">
+          <section className="hero">
+            <div><span className="eyebrow">CYBERSECURITY OPERATIONS</span><h1>{greeting()}, <mark>{text(user?.name || user?.full_name, "Operator")}</mark></h1><p>One security field. One operational picture.</p><small>Cypheris correlates telemetry, context, relationships and risk into a single command surface.</small></div>
+            <div className="health"><i /><div><span>CONTROL PLANE</span><strong>{error ? "DEGRADED" : "OPERATIONAL"}</strong></div></div>
+          </section>
+
+          <section className="metric-strip">
+            <div><span>ACTIVE THREATS</span><strong className="danger">{number(data?.threats)}</strong><small>requiring attention</small></div>
+            <div><span>SECURITY SCORE</span><strong>{number(data?.security_score)}%</strong><small>current posture</small></div>
+            <div><span>EVENTS</span><strong>{number(data?.events).toLocaleString()}</strong><small>observed signals</small></div>
+            <div><span>SENSORS</span><strong>{number(data?.integrations?.sensors)}</strong><small>connected sources</small></div>
+            <div><span>ONLINE SOURCES</span><strong>{number(data?.integrations?.online)}</strong><small>active integrations</small></div>
+          </section>
+
+          <section className="command-layout">
+            <Globe signals={data?.signals || []} threats={threats} />
+            <Activity items={activity} />
+          </section>
+
+          <section className="intelligence-layout">
+            <Lyromi userName={text(user?.name || user?.full_name, "Operator")} />
+            <div className="posture-panel">
+              <div className="section-head"><div><span>RISK POSTURE</span><h2>Security distribution</h2></div><strong>{number(data?.security_score)}%</strong></div>
+              <div className="posture-bars">{threatCounts.map(({ level, count }) => <div key={level}><div><span>{level}</span><b>{count}</b></div><div className="bar"><i className={level} style={{ width: `${Math.min(100, count * 12)}%` }} /></div></div>)}</div>
+              <div className="posture-foot"><span>TELEMETRY SOURCES</span><strong>{signalCount}</strong><small>Signals currently represented in the command plane</small></div>
+            </div>
+          </section>
+
+          <footer><span>CYPHERIS · PNSTAP SECURITY ENGINE</span><span>TELEMETRY → CONTEXT → RISK → RESPONSE</span></footer>
+        </div>
+      </main>
+    </div>
+  );
+}
