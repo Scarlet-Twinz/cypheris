@@ -15,15 +15,45 @@ import { Alerts, Network, Assets as OperationalAssets, Intelligence, Notificatio
 import { Incidents, Reports, Api } from "../pages/Platform/DeepPages";
 import { ContextOverview, Investigations, InvestigationDetail, Assets, Identity, Drift, Timeline, Evidence } from "../pages/Platform/ContextPages";
 
-export default function AppRoutes(){return <Routes>
-  <Route path="/" element={<Home/>}/><Route path="/login" element={<Login/>}/><Route path="/signup" element={<Signup/>}/><Route path="/invite/:token" element={<Invite/>}/>
-  <Route path="/onboarding" element={<Onboarding/>}/><Route path="/install-sensor" element={<InstallSensor/>}/><Route path="/sensor-setup" element={<SensorSetup/>}/><Route path="/dashboard" element={<Dashboard/>}/>
-  <Route path="/workspace" element={<PlatformHome/>}/><Route path="/workspace/context" element={<ContextOverview/>}/><Route path="/workspace/overview" element={<Overview/>}/><Route path="/workspace/security" element={<SecurityHub/>}/>
-  <Route path="/workspace/alerts" element={<Alerts/>}/><Route path="/workspace/network" element={<Network/>}/><Route path="/workspace/assets" element={<Assets/>}/><Route path="/workspace/assets/operations" element={<OperationalAssets/>}/>
-  <Route path="/workspace/sensors" element={<Sensors/>}/><Route path="/workspace/intelligence" element={<Intelligence/>}/><Route path="/workspace/risk-graph" element={<RiskGraph/>}/><Route path="/workspace/attack-paths" element={<AttackPaths/>}/>
-  <Route path="/workspace/compliance" element={<Compliance/>}/><Route path="/workspace/lyromi" element={<Lyromi/>}/><Route path="/workspace/incidents" element={<Incidents/>}/><Route path="/workspace/investigations" element={<Investigations/>}/>
-  <Route path="/workspace/investigations/:id" element={<InvestigationDetail/>}/><Route path="/workspace/identity" element={<Identity/>}/><Route path="/workspace/drift" element={<Drift/>}/><Route path="/workspace/timeline" element={<Timeline/>}/>
-  <Route path="/workspace/evidence" element={<Evidence/>}/><Route path="/workspace/reports" element={<Reports/>}/><Route path="/workspace/integrations" element={<Integrations/>}/><Route path="/workspace/notifications" element={<Notifications/>}/>
-  <Route path="/workspace/team" element={<TeamAdmin/>}/><Route path="/workspace/billing" element={<Billing/>}/><Route path="/workspace/settings" element={<BrandingAdmin/>}/><Route path="/workspace/audit" element={<Audit/>}/><Route path="/workspace/api" element={<Api/>}/>
-  <Route path="*" element={<Navigate to="/" replace/>}/>
-</Routes>}
+export default function AppRoutes() {
+  return <Routes>
+    <Route path="/" element={<Home />} />
+    <Route path="/login" element={<Login />} />
+    <Route path="/signup" element={<Signup />} />
+    <Route path="/invite/:token" element={<Invite />} />
+    <Route path="/onboarding" element={<Onboarding />} />
+    <Route path="/install-sensor" element={<InstallSensor />} />
+    <Route path="/sensor-setup" element={<SensorSetup />} />
+    <Route path="/dashboard" element={<Dashboard />} />
+    <Route path="/workspace" element={<PlatformHome />} />
+    <Route path="/workspace/context" element={<ContextOverview />} />
+    <Route path="/workspace/overview" element={<Overview />} />
+    <Route path="/workspace/security" element={<SecurityHub />} />
+    <Route path="/workspace/alerts" element={<Alerts />} />
+    <Route path="/workspace/network" element={<Network />} />
+    <Route path="/workspace/assets" element={<Assets />} />
+    <Route path="/workspace/assets/operations" element={<OperationalAssets />} />
+    <Route path="/workspace/sensors" element={<Sensors />} />
+    <Route path="/workspace/intelligence" element={<Intelligence />} />
+    <Route path="/workspace/risk-graph" element={<RiskGraph />} />
+    <Route path="/workspace/attack-paths" element={<AttackPaths />} />
+    <Route path="/workspace/compliance" element={<Compliance />} />
+    <Route path="/workspace/lyromi" element={<Lyromi />} />
+    <Route path="/workspace/incidents" element={<Incidents />} />
+    <Route path="/workspace/investigations" element={<Investigations />} />
+    <Route path="/workspace/investigations/:id" element={<InvestigationDetail />} />
+    <Route path="/workspace/identity" element={<Identity />} />
+    <Route path="/workspace/drift" element={<Drift />} />
+    <Route path="/workspace/timeline" element={<Timeline />} />
+    <Route path="/workspace/evidence" element={<Evidence />} />
+    <Route path="/workspace/reports" element={<Reports />} />
+    <Route path="/workspace/integrations" element={<Integrations />} />
+    <Route path="/workspace/notifications" element={<Notifications />} />
+    <Route path="/workspace/team" element={<TeamAdmin />} />
+    <Route path="/workspace/billing" element={<Billing />} />
+    <Route path="/workspace/settings" element={<BrandingAdmin />} />
+    <Route path="/workspace/audit" element={<Audit />} />
+    <Route path="/workspace/api" element={<Api />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>;
+}
