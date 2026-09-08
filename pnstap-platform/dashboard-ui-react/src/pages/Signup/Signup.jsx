@@ -4,7 +4,7 @@ import "./Signup.css";
 import logo from "../../assets/logo/cypheris-logo.jpg";
 import countries from "./countries";
 
-const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000`).replace(/\/$/, "");
 
 const initialForm = { company_name: "", industry: "", country: "", website: "", full_name: "", email: "", phone_number: "", password: "", confirm_password: "" };
 
@@ -31,8 +31,8 @@ export default function Signup() {
         try {
             const data = await response.json();
             if (Array.isArray(data?.detail)) return data.detail.map((item) => item?.msg || "Invalid information.").join(" ");
-            return data?.detail || data?.message || "Unable to create your Cypheris workspace.";
-        } catch { return "Unable to create your Cypheris workspace."; }
+            return data?.detail || data?.message || `Unable to create your Cypheris workspace (${response.status}).`;
+        } catch { return `Unable to create your Cypheris workspace (${response.status}).`; }
     };
     const handleSubmit = async (event) => {
         event.preventDefault(); setError("");
