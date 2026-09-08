@@ -27,7 +27,7 @@ load_dotenv(BASE_DIR / ".env", override=True)
 def configured_origins():
     raw = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost,http://localhost:80,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:5173",
+        "http://localhost,http://localhost:80,http://localhost:8000,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:8000,http://127.0.0.1:5173",
     )
     return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
 
@@ -38,10 +38,12 @@ app = FastAPI(
     description="Security intelligence and infrastructure visibility powered by PNSTAP™.",
 )
 
+# The Dockerized UI is served from http://localhost while the API is exposed on
+# http://localhost:8000. Keep the local origins explicit so browser requests,
+# including JSON POSTs and authenticated API calls, work consistently.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=configured_origins(),
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +73,7 @@ def health():
 
 
 @app.get("/database")
+@app.get("/api/database/status")
 def database_status():
     connection = get_db_connection()
     if connection is None:
