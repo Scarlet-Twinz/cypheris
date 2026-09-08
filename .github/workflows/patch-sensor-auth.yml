@@ -1,0 +1,70 @@
+name: Patch sensor enrollment auth
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch InstallSensor auth
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("pnstap-platform/dashboard-ui-react/src/pages/InstallSensor/InstallSensor.jsx")
+          text = path.read_text(encoding="utf-8")
+
+          old = '''    const createSensorEnrollment = async () => {
+        const response = await fetch(
+            `${API_URL}/api/sensors/enroll`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                },'''
+
+          new = '''    const createSensorEnrollment = async () => {
+        const token =
+            localStorage.getItem("access_token") ||
+            localStorage.getItem("token") ||
+            "";
+
+        if (!token) {
+            throw new Error(
+                "Your authentication session could not be found. Please sign in again."
+            );
+        }
+
+        const response = await fetch(
+            `${API_URL}/api/sensors/enroll`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },'''
+
+          if old not in text:
+              raise SystemExit("Expected sensor enrollment block was not found; no changes made.")
+
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnstap-platform/dashboard-ui-react/src/pages/InstallSensor/InstallSensor.jsx .github/workflows/patch-sensor-auth.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: authenticate sensor enrollment requests"
+          git push
