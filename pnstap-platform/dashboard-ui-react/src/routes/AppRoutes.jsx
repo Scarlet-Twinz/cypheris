@@ -3,7 +3,6 @@ import Home from "../pages/Home/Home";
 import Login from "../pages/Login/Login";
 import Signup from "../pages/Signup/Signup";
 import Dashboard from "../pages/Dashboard/Dashboard";
-import Onboarding from "../pages/onboarding/onboarding";
 import InstallSensor from "../pages/InstallSensor/InstallSensor";
 import SensorSetup from "../pages/SensorSetup/SensorSetup";
 import Invite from "../pages/Invite/Invite";
@@ -21,7 +20,6 @@ export default function AppRoutes() {
     <Route path="/login" element={<Login />} />
     <Route path="/signup" element={<Signup />} />
     <Route path="/invite/:token" element={<Invite />} />
-    <Route path="/onboarding" element={<Onboarding />} />
     <Route path="/install-sensor" element={<InstallSensor />} />
     <Route path="/sensor-setup" element={<SensorSetup />} />
     <Route path="/dashboard" element={<Dashboard />} />
