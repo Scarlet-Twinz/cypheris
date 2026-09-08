@@ -2,9 +2,23 @@
 
 **Decode Your Security.**
 
+> **Status: Active Development**
+>
+> Cypheris is an independent product under active development. The architecture, implementation, product concepts, branding, and user experience are evolving as the platform is built and tested.
+
 Cypheris is a security intelligence and infrastructure visibility platform designed to turn telemetry, security events, sensor data, integrations, and AI-assisted analysis into an operational security command layer.
 
 The platform is organized around **Cypheris Core**, the security platform powered by **PNSTAP™**, with **Cypheris Sentinel** providing the command-center experience and **LYROMI** providing the AI intelligence layer.
+
+## Important Notice
+
+This repository is **not an open-source project** and no open-source license has been granted.
+
+The source code, product architecture, product concepts, branding, names, visual identity, documentation, and other original materials in this repository are proprietary to the project owner unless explicitly stated otherwise.
+
+**Do not clone, copy, redistribute, republish, rebrand, commercialize, or create a substantially derived product from this repository without explicit written permission from the project owner.**
+
+Forking or downloading this repository does not grant permission to reuse its contents commercially or publish derivative implementations.
 
 ## Platform
 
@@ -198,4 +212,4 @@ The roadmap is intentionally separated from claims about already-implemented fun
 
 ## License
 
-No open-source license has been declared for this repository yet. Until a license is added, default copyright protections apply.
+No open-source license has been declared for this repository. Until a license is added, default copyright protections apply.
