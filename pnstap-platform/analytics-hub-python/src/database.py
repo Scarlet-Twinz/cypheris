@@ -9,21 +9,13 @@ from dotenv import load_dotenv
 # ENVIRONMENT
 # ============================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_FILE = os.path.join(BASE_DIR, ".env")
 
-ENV_FILE = os.path.join(
-    BASE_DIR,
-    ".env"
-)
-
-# Local development may use this file, but Docker/runtime
-# environment variables must remain authoritative.
-load_dotenv(
-    ENV_FILE,
-    override=False
-)
+# Docker supplies the authoritative runtime configuration.
+# Only load the local .env file outside Docker.
+if not os.path.exists("/.dockerenv"):
+    load_dotenv(ENV_FILE, override=False)
 
 
 # ============================================================
@@ -32,15 +24,14 @@ load_dotenv(
 
 def get_db_connection():
     try:
+        in_docker = os.path.exists("/.dockerenv")
+
         host = os.getenv(
             "DB_HOST",
-            "127.0.0.1"
+            "postgres" if in_docker else "127.0.0.1"
         )
 
-        port = os.getenv(
-            "DB_PORT",
-            "5432"
-        )
+        port = os.getenv("DB_PORT", "5432")
 
         database = os.getenv(
             "DB_NAME",
@@ -52,9 +43,7 @@ def get_db_connection():
             "postgres"
         )
 
-        password = os.getenv(
-            "DB_PASSWORD"
-        )
+        password = os.getenv("DB_PASSWORD")
 
         if not password:
             print(
@@ -69,6 +58,7 @@ def get_db_connection():
             f"port={port}",
             f"database={database}",
             f"user={user}",
+            f"docker={in_docker}",
         )
 
         connection = psycopg2.connect(
@@ -78,12 +68,10 @@ def get_db_connection():
             user=user,
             password=password,
             cursor_factory=RealDictCursor,
+            connect_timeout=5,
         )
 
-        print(
-            "DATABASE CONNECTION: SUCCESS"
-        )
-
+        print("DATABASE CONNECTION: SUCCESS")
         return connection
 
     except Exception as error:
