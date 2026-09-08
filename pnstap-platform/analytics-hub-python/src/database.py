@@ -18,9 +18,11 @@ ENV_FILE = os.path.join(
     ".env"
 )
 
+# Local development may use this file, but Docker/runtime
+# environment variables must remain authoritative.
 load_dotenv(
     ENV_FILE,
-    override=True
+    override=False
 )
 
 
