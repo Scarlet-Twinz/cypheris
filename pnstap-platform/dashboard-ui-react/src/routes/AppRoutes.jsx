@@ -14,11 +14,9 @@ import { SecurityHub, RiskGraph, Compliance, AttackPaths } from "../pages/Platfo
 import { Alerts, Network, Assets as OperationalAssets, Intelligence, Notifications } from "../pages/Platform/OperationalPages";
 import { Incidents, Reports, Api } from "../pages/Platform/DeepPages";
 import { ContextOverview, Investigations, InvestigationDetail, Assets, Identity, Drift, Timeline, Evidence } from "../pages/Platform/ContextPages";
-import { Trial, Demo, About, Platform, ProductDetail } from "../pages/Public/PublicPages";
 
 export default function AppRoutes(){return <Routes>
   <Route path="/" element={<Home/>}/><Route path="/login" element={<Login/>}/><Route path="/signup" element={<Signup/>}/><Route path="/invite/:token" element={<Invite/>}/>
-  <Route path="/trial" element={<Trial/>}/><Route path="/demo" element={<Demo/>}/><Route path="/about" element={<About/>}/><Route path="/platform" element={<Platform/>}/><Route path="/platform/:area" element={<ProductDetail/>}/>
   <Route path="/onboarding" element={<Onboarding/>}/><Route path="/install-sensor" element={<InstallSensor/>}/><Route path="/sensor-setup" element={<SensorSetup/>}/><Route path="/dashboard" element={<Dashboard/>}/>
   <Route path="/workspace" element={<PlatformHome/>}/><Route path="/workspace/context" element={<ContextOverview/>}/><Route path="/workspace/overview" element={<Overview/>}/><Route path="/workspace/security" element={<SecurityHub/>}/>
   <Route path="/workspace/alerts" element={<Alerts/>}/><Route path="/workspace/network" element={<Network/>}/><Route path="/workspace/assets" element={<Assets/>}/><Route path="/workspace/assets/operations" element={<OperationalAssets/>}/>
