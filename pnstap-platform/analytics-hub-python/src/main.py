@@ -25,7 +25,10 @@ load_dotenv(BASE_DIR / ".env", override=True)
 
 
 def configured_origins():
-    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    raw = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost,http://localhost:80,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:5173",
+    )
     return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
 
 
@@ -38,6 +41,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=configured_origins(),
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
