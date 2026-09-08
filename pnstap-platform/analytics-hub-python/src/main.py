@@ -21,7 +21,9 @@ from routers.monitoring import router as monitoring_router
 from routers.context import router as context_router
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env", override=True)
+# Keep runtime/Docker environment variables authoritative. The local .env is
+# only a fallback for development when a variable is not already configured.
+load_dotenv(BASE_DIR / ".env", override=False)
 
 
 def configured_origins():
