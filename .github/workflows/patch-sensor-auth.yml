@@ -1,14 +1,16 @@
 name: Patch sensor enrollment auth
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Cypheris CI"]
+    types: [completed]
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -64,7 +66,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnstap-platform/dashboard-ui-react/src/pages/InstallSensor/InstallSensor.jsx .github/workflows/patch-sensor-auth.yml
+          git rm .github/workflows/patch-sensor-auth.yml
+          git add pnstap-platform/dashboard-ui-react/src/pages/InstallSensor/InstallSensor.jsx
           git diff --cached --quiet && exit 0
           git commit -m "fix: authenticate sensor enrollment requests"
           git push
