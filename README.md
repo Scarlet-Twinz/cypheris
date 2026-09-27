@@ -212,4 +212,4 @@ The roadmap is intentionally separated from claims about already-implemented fun
 
 ## License
 
-No open-source license has been declared for this repository. Until a license is added, default copyright protections apply.
+This repository is proprietary. See [LICENSE](LICENSE). No open-source license is granted.
