@@ -210,6 +210,9 @@ The roadmap is intentionally separated from claims about already-implemented fun
 - **Security by default:** credentials are hashed, protected endpoints require authentication, and secrets stay out of source control.
 - **Product-first architecture:** Cypheris is structured as a platform that can evolve independently of a single demo or UI screen.
 
+
 ## License
 
-This repository is proprietary. See [LICENSE](LICENSE). No open-source license is granted.
+MIT License.
+
+See [LICENSE](LICENSE) for the full license text.
